@@ -18,6 +18,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   :root{
+    /* 底部留白：iPhone 全螢幕會回報 34px（home indicator），
+       瀏覽器同 Apps Script 回報 0，就用 12px 兜底。
+       用 max() 唔用相加，先唔會兩者疊埋變雙倍。 */
+    --safe-b:max(env(safe-area-inset-bottom, 0px), 12px);
+    --nav-h:calc(38px + var(--safe-b));
     --paper:#F4F1E8;
     --card:#FDFCF8;
     --ink:#2A2722;
@@ -33,7 +38,7 @@
   body{
     font-family:'Noto Sans TC',sans-serif;background:var(--paper);color:var(--ink);
     font-size:15px;line-height:1.55;
-    padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 96px);
+    padding-bottom:calc(var(--nav-h) + 22px);
   }
   h1,h2,h3{font-family:'Noto Serif TC',serif}
 
@@ -193,7 +198,7 @@
   nav{
     position:fixed;bottom:0;left:0;right:0;background:var(--card);
     border-top:1px solid var(--line);display:flex;z-index:20;
-    padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 20px);
+    padding-bottom:var(--safe-b);
   }
   nav button{
     flex:1;background:none;border:none;padding:10px 0 8px;font-size:13px;
@@ -416,12 +421,12 @@
   /* 儲存列（有改動先出現） */
   .savebar{
     position:fixed;left:0;right:0;
-    bottom:calc(env(safe-area-inset-bottom, 0px) + 56px);
+    bottom:var(--nav-h);
     display:none;gap:8px;padding:9px 14px;z-index:25;
     background:rgba(253,252,248,.97);border-top:1px solid var(--line);
   }
   .savebar.show{display:flex}
-  body.has-savebar{padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 152px)}
+  body.has-savebar{padding-bottom:calc(var(--nav-h) + 78px)}
   .savebar button{flex:1;padding:11px;border-radius:8px;font-family:inherit;font-size:15px;cursor:pointer}
   .savebar .ghost{flex:0 0 88px;border:1px solid var(--line);background:#fff;color:var(--ink-soft)}
   .savebar .primary{background:var(--ai);color:#fff;border:none;font-weight:500}
@@ -732,7 +737,7 @@ function renderNav() {
     if (['login', 'me'].indexOf(state.tab) === -1) state.tab = 'today';
     nav.innerHTML = '';
     nav.style.display = 'none';
-    document.body.style.paddingBottom = 'calc(env(safe-area-inset-bottom, 0px) + 28px)';
+    document.body.style.paddingBottom = 'calc(var(--safe-b) + 16px)';
     return;
   }
 
