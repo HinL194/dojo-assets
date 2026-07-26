@@ -39,7 +39,10 @@
 
   /* ---------- 頁首（月相 logo） ---------- */
   header{
-    background:var(--hdr-bg, #1B3450);color:#F2EFE6;padding:11px 18px 10px;
+    background:var(--hdr-bg, #1B3450);color:#F2EFE6;
+    /* 加到主畫面後係全螢幕，要預留返 iPhone 狀態列（時間／電量）嘅高度。
+       喺瀏覽器同 Apps Script 入面 env() 係 0，所以行為唔變。 */
+    padding:calc(env(safe-area-inset-top, 0px) + 11px) 18px 10px;
     display:flex;align-items:center;gap:12px;
   }
   /* 滿月：月亮喺左邊，所以左邊最光、向右漸暗；雲唔會出現 */
@@ -139,7 +142,7 @@
       --pfs:15px; --gap:3px; --driftX:-92px; --driftY:-37px;
       padding:3px 3px 2px;
     }
-    header{padding:15px 26px 13px;gap:16px}
+    header{padding:calc(env(safe-area-inset-top, 0px) + 15px) 26px 13px;gap:16px}
     header h1{font-size:26px}
     .hdr-user{font-size:15px;gap:12px}
     .hdr-user .uid{font-size:13.5px}
@@ -180,7 +183,11 @@
   }
   .hdr-user button:active{background:rgba(242,239,230,.15)}
 
-  main{max-width:640px;margin:0 auto;padding:14px 14px 8px}
+  main{
+    max-width:640px;margin:0 auto;
+    padding:14px calc(env(safe-area-inset-right, 0px) + 14px)
+            8px calc(env(safe-area-inset-left, 0px) + 14px);
+  }
 
   /* ---------- 分頁導覽 ---------- */
   nav{
