@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>道場工務系統</title>
 
+<!-- 唔俾搜尋引擎收錄：呢個係道場內部工具，冇理由出現喺 Google 搜尋結果 -->
+<meta name="robots" content="noindex, nofollow, noarchive">
+
 <!-- ===== 加到主畫面（PWA）用 =====
      用絕對網址，所以喺 Apps Script 入面開都唔會 404。
      如果你改咗 GitHub 用戶名或 repo 名，記住連呢幾行一齊改。 -->
@@ -21,7 +24,7 @@
     /* 底部留白：iPhone 全螢幕會回報 34px（home indicator），
        瀏覽器同 Apps Script 回報 0，就用 12px 兜底。
        用 max() 唔用相加，先唔會兩者疊埋變雙倍。 */
-    --safe-b:max(env(safe-area-inset-bottom, 0px), 12px);
+    --safe-b:max(env(safe-area-inset-bottom, 0px), 20px);
     --nav-h:calc(38px + var(--safe-b));
     --paper:#F4F1E8;
     --card:#FDFCF8;
