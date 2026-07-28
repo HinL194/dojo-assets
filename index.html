@@ -608,7 +608,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v16';
+var APP_VERSION = 'v17';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -711,9 +711,11 @@ function main() { return document.getElementById('main'); }
 function val(id) { var e = document.getElementById(id); return e ? e.value.trim() : ''; }
 /* 角色清單要同 Code.gs 嗰邊一致 */
 var R_LEADER = ['館長', '組長', '副組長'];
-var R_OPS = ['館長', '組長', '副組長', '導師', '組員'];
+var R_OPS    = ['館長', '組長', '副組長', '組員'];            // 物資（唔含導師）
+var R_REPORT = ['館長', '組長', '副組長', '導師', '組員'];    // 報告頁（含導師）
 function isLeader() { return !!(state.auth && R_LEADER.indexOf(state.auth.role) > -1); }
-function isOps() { return !!(state.auth && R_OPS.indexOf(state.auth.role) > -1); }
+function isOps()    { return !!(state.auth && R_OPS.indexOf(state.auth.role) > -1); }
+function isReport() { return !!(state.auth && R_REPORT.indexOf(state.auth.role) > -1); }
 
 /* ============ 月相圖示 ============ */
 /**
@@ -799,15 +801,19 @@ function dimHeader() {
 }
 
 /* ============ 導覽 ============ */
-/* 第三個值 = 最低要求角色：'member' 會員以上，'ops' 組員以上 */
 var TABS_IN = [
   ['today', '今日工作', 'member'],
   ['bow',   '公家弓',   'member'],
   ['stock', '物資',     'ops'],
-  ['stats', '報告',     'ops']
+  ['stats', '報告',     'report']   // 含導師
 ];
 function visibleTabs() {
-  return TABS_IN.filter(function (t) { return t[2] === 'member' || isOps(); });
+  return TABS_IN.filter(function (t) {
+    if (t[2] === 'member') return true;
+    if (t[2] === 'ops')    return isOps();
+    if (t[2] === 'report') return isReport();
+    return false;
+  });
 }
 
 function renderNav() {
@@ -846,7 +852,11 @@ function render() {
   if (!state.auth) return renderLogin();
   if (state.tab === 'me') return renderMe();
   if (state.tab === 'bow') return renderBow();   // 會員以上都用得
-  if (!isOps()) return renderToday();      // 會員冇工務功能
+  if (state.tab === 'stats' && isReport()) {     // 導師可以睇報告
+    if (!state.ops) return isOps() ? loadOps() : loadReport();
+    return renderStats();
+  }
+  if (!isOps()) return renderToday();      // 其餘功能需要工務組
   if (!state.ops) return loadOps();
   if (state.tab === 'stock') return renderStock();
   if (state.tab === 'stats') return renderStats();
@@ -1885,6 +1895,17 @@ function doBowStatus(id, st) {
 }
 
 /* ============ 載入工務資料 ============ */
+function loadReport() {
+  main().innerHTML = '<div class="loading">載入中</div>';
+  call('getReportData', authPayload()).then(function (d) {
+    state.ops = d;
+    if (state.tab === 'stats') renderStats();
+  }).catch(function (e) {
+    main().innerHTML = '<div class="empty">載入失敗：' + esc(e.message) +
+      '<br><br><button class="ghost" onclick="state.ops=null;render()">重試</button></div>';
+  });
+}
+
 function loadOps() {
   main().innerHTML = '<div class="loading">載入中</div>';
   call('getOpsData', { id: state.auth.id, pin: state.auth.pin }).then(function (d) {
@@ -2438,6 +2459,9 @@ function renderStats() {
     h += '<button class="ghost" style="width:100%;margin-top:2px" onclick="toggleBowAll()">' +
       (state.bowAllStats ? '只睇需要留意嘅' : '睇全部 ' + bows.length + ' 張弓') + '</button>';
   }
+
+  /* ---- 以下只有工務組先見到（導師到此為止） ---- */
+  if (!isOps()) { main().innerHTML = h; return; }
 
   /* ---- 維修紀錄（原本喺獨立分頁，而家歸埋入嚟；報告新維修改咗喺今日工作頁） ---- */
   h += '<div class="section-label">維修紀錄</div>';
