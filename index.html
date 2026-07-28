@@ -38,10 +38,15 @@
     --radius:10px;
   }
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  /* ---------- 版面結構：header / main / nav 三段式 flex column ----------
+     body 本身唔捲動，淨係 main 內部捲動。呢個係業界標準做法，
+     可以徹底避開 iOS 全螢幕 PWA 入面 position:fixed 導覽同彈跳捲動
+     互相干擾、令底部元素「浮走」嘅經典 bug —— 唔使再逐次補丁數值。 */
+  html,body{height:100%;overflow:hidden}
   body{
+    display:flex;flex-direction:column;
     font-family:'Noto Sans TC',sans-serif;background:var(--paper);color:var(--ink);
     font-size:15px;line-height:1.55;
-    padding-bottom:calc(var(--nav-h) + 22px);
   }
   h1,h2,h3{font-family:'Noto Serif TC',serif}
 
@@ -192,17 +197,21 @@
   .hdr-user button:active{background:rgba(242,239,230,.15)}
 
   main{
-    max-width:640px;margin:0 auto;
+    flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    width:100%;max-width:640px;margin:0 auto;
     padding:14px calc(env(safe-area-inset-right, 0px) + 14px)
-            8px calc(env(safe-area-inset-left, 0px) + 14px);
+            22px calc(env(safe-area-inset-left, 0px) + 14px);
   }
+  /* nav 唔顯示嗰陣（未登入／純會員），main 要自己頂埋底部 safe area */
+  body.nav-hidden main{padding-bottom:calc(22px + var(--safe-b))}
 
-  /* ---------- 分頁導覽 ---------- */
+  /* ---------- 分頁導覽 ----------
+     正常排版佔位（唔再 position:fixed），永遠貼實螢幕最底，
+     唔會再受彈跳捲動影響。 */
   nav{
-    position:fixed;bottom:0;left:0;right:0;background:var(--card);
+    flex:0 0 auto;background:var(--card);
     border-top:1px solid var(--line);display:flex;z-index:20;
-    padding-bottom:20px;                                   /* 兜底 */
-    padding-bottom:max(env(safe-area-inset-bottom), 20px); /* 支援就用真實數值 */
+    padding-bottom:var(--safe-b);
   }
   nav button{
     flex:1;background:none;border:none;padding:10px 0 8px;font-size:13px;
@@ -265,6 +274,15 @@
     font-size:16px;font-weight:500;letter-spacing:.08em;margin-bottom:6px;
   }
   .rollcall:active{background:var(--ai-deep)}
+  .repairbtn{
+    display:block;width:100%;text-align:center;
+    background:var(--card);color:var(--ai);border:1px solid var(--ai);
+    padding:11px 16px;border-radius:var(--radius);
+    font-size:14.5px;font-weight:500;font-family:inherit;cursor:pointer;
+    margin-bottom:14px;
+  }
+  .repairbtn:active{background:var(--paper)}
+  .card.repair-form{margin-bottom:14px;border-color:var(--ai)}
   .login-hint{
     text-align:center;color:var(--ink-soft);font-size:13px;line-height:1.7;
     border:1px dashed var(--line);border-radius:var(--radius);
@@ -425,12 +443,12 @@
   /* 儲存列（有改動先出現） */
   .savebar{
     position:fixed;left:0;right:0;
-    bottom:var(--nav-h);
+    bottom:var(--nav-h);   /* 浮喺 nav 上面；nav 而家係正常排版，呢個位置仍然啱 */
     display:none;gap:8px;padding:9px 14px;z-index:25;
     background:rgba(253,252,248,.97);border-top:1px solid var(--line);
   }
   .savebar.show{display:flex}
-  body.has-savebar{padding-bottom:calc(var(--nav-h) + 78px)}
+  body.has-savebar main{padding-bottom:calc(var(--nav-h) + 78px)}
   .savebar button{flex:1;padding:11px;border-radius:8px;font-family:inherit;font-size:15px;cursor:pointer}
   .savebar .ghost{flex:0 0 88px;border:1px solid var(--line);background:#fff;color:var(--ink-soft)}
   .savebar .primary{background:var(--ai);color:#fff;border:none;font-weight:500}
@@ -561,7 +579,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v13';
+var APP_VERSION = 'v14';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -583,6 +601,7 @@ var state = {
   rotaEdit: false,      // 工作表編輯模式
   fullMoonPlayed: false,// 滿月自動動畫播咗未（每次開網頁一次）
   dutyOpen: null,       // 今日工作邊張卡展開咗
+  repairFormOpen: false,// 今日工作頁嘅「報維修」表單開咗未
   rotaEditingId: null,  // 正在編輯邊一行（'__new__' = 新增）
   builder: null         // 予定組合器狀態
 };
@@ -737,7 +756,7 @@ function dimHeader() {
 }
 
 /* ============ 導覽 ============ */
-var TABS_IN = [['today', '今日工作'], ['stock', '物資'], ['repair', '維修'], ['stats', '統計']];
+var TABS_IN = [['today', '今日工作'], ['stock', '物資'], ['stats', '報告']];
 
 function renderNav() {
   var nav = document.getElementById('nav');
@@ -747,12 +766,12 @@ function renderNav() {
     if (['login', 'me'].indexOf(state.tab) === -1) state.tab = 'today';
     nav.innerHTML = '';
     nav.style.display = 'none';
-    document.body.style.paddingBottom = 'calc(var(--safe-b) + 16px)';
+    document.body.classList.add('nav-hidden');   // main 自己頂返 safe area
     return;
   }
 
   nav.style.display = 'flex';
-  document.body.style.paddingBottom = '';
+  document.body.classList.remove('nav-hidden');
   // 'me' 冇底部掣，但係合法頁面
   var valid = TABS_IN.some(function (t) { return t[0] === state.tab; }) || state.tab === 'me';
   if (!valid) state.tab = 'today';
@@ -776,7 +795,6 @@ function render() {
   if (!isOps()) return renderToday();      // 會員冇工務功能
   if (!state.ops) return loadOps();
   if (state.tab === 'stock') return renderStock();
-  if (state.tab === 'repair') return renderRepair();
   if (state.tab === 'stats') return renderStats();
 }
 
@@ -822,6 +840,13 @@ function renderToday() {
   } else if (isLeader()) {
     h += '<div class="empty" style="margin-bottom:10px;padding:14px">' +
       '未設定點名連結<br><button class="ghost" style="margin-top:8px" onclick="openSettings()">去設定</button></div>';
+  }
+
+  /* 報維修（組員以上） */
+  if (isOps()) {
+    h += '<button class="repairbtn" onclick="toggleRepairForm()">🔧 報維修' +
+      (state.repairFormOpen ? ' ✕' : '') + '</button>';
+    if (state.repairFormOpen) h += repairFormCard();
   }
 
   h += '<div class="section-label">今日 · ' + esc(d.todayName) + '</div>';
@@ -893,6 +918,29 @@ function dutyCard(r, i) {
   }
   return h + '</div>';
 }
+function toggleRepairForm() {
+  state.repairFormOpen = !state.repairFormOpen;
+  renderToday();
+}
+function repairFormCard() {
+  return '<div class="card repair-form">' +
+    '<label>器具／位置</label><input id="rItem" placeholder="例：3號巻藁 / 冷氣隔塵網">' +
+    '<label>問題描述</label><textarea id="rDesc" rows="2"></textarea>' +
+    '<div style="margin-top:12px"><button class="primary" onclick="submitRepairToday()">提交</button></div>' +
+    '</div>';
+}
+function submitRepairToday() {
+  var item = val('rItem'), desc = val('rDesc');
+  if (!item || !desc) return toast('請填齊器具同問題描述');
+  toast('提交中…');
+  call('reportRepair', authPayload(), { item: item, desc: desc }).then(function () {
+    toast('已報告維修');
+    state.repairFormOpen = false;
+    if (state.ops) state.ops = null;   // 有舊嘅工務資料就清埋，等報告頁下次載入見到新紀錄
+    renderToday();
+  }).catch(function (e) { toast('失敗：' + e.message); });
+}
+
 function toggleDuty(i) {
   state.dutyOpen = (state.dutyOpen === i) ? null : i;
   renderToday();
@@ -1921,48 +1969,6 @@ function addItem() {
 var STATUS = ['待處理', '處理中', '完成'];
 function chipClass(s) { return s === '完成' ? 's2' : (s === '處理中' ? 's1' : 's0'); }
 
-function renderRepair() {
-  var d = state.ops;
-  var h = '';
-
-  h += '<div class="section-label">報告維修</div><div class="card">' +
-    '<label>器具／位置</label><input id="rItem" placeholder="例：3號巻藁 / 冷氣隔塵網">' +
-    '<label>問題描述</label><textarea id="rDesc" rows="2"></textarea>' +
-    '<div style="margin-top:12px"><button class="primary" onclick="submitRepair()">提交</button></div>' +
-    '</div>';
-
-  h += '<div class="section-label">維修紀錄</div>';
-  if (!d.repairs.length) {
-    h += '<div class="empty">未有維修紀錄</div>';
-  } else {
-    d.repairs.forEach(function (r) {
-      var done = r['狀態'] === '完成';
-      h += '<div class="card">' +
-        '<div class="repair-head"><span class="repair-item">' + esc(r['器具／位置']) + '</span>' +
-        '<span class="chip ' + chipClass(r['狀態']) + '">' + esc(r['狀態']) + '</span></div>' +
-        '<div class="repair-desc">' + esc(r['問題描述']) + '</div>' +
-        '<div class="repair-meta">' + esc(r['編號']) + ' · ' + esc(r['報告人']) + ' 報告於 ' + esc(r['報告日期']) +
-        (r['處理人'] ? '<br>' + esc(r['處理人']) + ' 更新於 ' + esc(r['最後更新']) : '') +
-        (r['備註'] ? '<br>備註：' + esc(r['備註']) : '') + '</div>' +
-        (!done ?
-          '<div class="status-btns">' + STATUS.map(function (s) {
-            return '<button class="' + (r['狀態'] === s ? 'on' : '') + '" onclick="setStatus(\'' +
-              esc(r['編號']) + '\',\'' + s + '\')">' + s + '</button>';
-          }).join('') + '</div>' : '') +
-        '</div>';
-    });
-  }
-  main().innerHTML = h;
-}
-function submitRepair() {
-  var item = val('rItem'), desc = val('rDesc');
-  if (!item || !desc) return toast('請填齊器具同問題描述');
-  toast('提交中…');
-  call('reportRepair', authPayload(), { item: item, desc: desc }).then(function () {
-    toast('已報告維修');
-    refreshOps();
-  }).catch(function (e) { toast('失敗：' + e.message); });
-}
 function setStatus(id, status) {
   var note = '';
   if (status === '完成') note = prompt('完成備註（可留空）：') || '';
@@ -2014,6 +2020,29 @@ function actFeed(list, dim) {
 function renderStats() {
   var d = state.ops;
   var h = '';
+
+  /* ---- 維修紀錄（原本喺獨立分頁，而家歸埋入嚟；報告新維修改咗喺今日工作頁） ---- */
+  h += '<div class="section-label">維修紀錄</div>';
+  if (!d.repairs.length) {
+    h += '<div class="empty">未有維修紀錄</div>';
+  } else {
+    d.repairs.forEach(function (r) {
+      var done = r['狀態'] === '完成';
+      h += '<div class="card">' +
+        '<div class="repair-head"><span class="repair-item">' + esc(r['器具／位置']) + '</span>' +
+        '<span class="chip ' + chipClass(r['狀態']) + '">' + esc(r['狀態']) + '</span></div>' +
+        '<div class="repair-desc">' + esc(r['問題描述']) + '</div>' +
+        '<div class="repair-meta">' + esc(r['編號']) + ' · ' + esc(r['報告人']) + ' 報告於 ' + esc(r['報告日期']) +
+        (r['處理人'] ? '<br>' + esc(r['處理人']) + ' 更新於 ' + esc(r['最後更新']) : '') +
+        (r['備註'] ? '<br>備註：' + esc(r['備註']) : '') + '</div>' +
+        (!done ?
+          '<div class="status-btns">' + STATUS.map(function (s) {
+            return '<button class="' + (r['狀態'] === s ? 'on' : '') + '" onclick="setStatus(\'' +
+              esc(r['編號']) + '\',\'' + s + '\')">' + s + '</button>';
+          }).join('') + '</div>' : '') +
+        '</div>';
+    });
+  }
 
   /* ---- 最近事項（組員以上都睇到） ---- */
   var recent = d.recent || [];
