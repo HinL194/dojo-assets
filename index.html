@@ -466,6 +466,31 @@
   .status-btns button{flex:1;padding:8px 4px;font-size:13px;border-radius:8px;border:1px solid var(--line);background:#fff;font-family:inherit;cursor:pointer}
   .status-btns button.on{background:var(--ai);color:#fff;border-color:var(--ai)}
 
+  /* ---------- 公家弓 ---------- */
+  .bow-grid{
+    display:grid;gap:8px;align-items:start;
+    grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));
+  }
+  .bow-grid .card{margin-bottom:0}
+  .card.bow{padding:0;overflow:hidden}
+  .bow-main{display:flex;align-items:center;gap:9px;padding:10px 11px;cursor:pointer}
+  .bow-no{
+    font-size:17px;font-weight:700;color:var(--ai);
+    font-variant-numeric:tabular-nums;flex:0 0 auto;
+  }
+  .bow-info{flex:1;min-width:0}
+  .bow-brand{font-size:14px;line-height:1.3}
+  .bow-meta{font-size:11px;color:var(--ink-soft);margin-top:1px}
+  .card.bow.picked{border-color:var(--ai);grid-column:1 / -1}
+  .card.bow.due .bow-no{color:var(--shu)}
+  .card.bow.off{opacity:.5}
+  .card.bow.off .bow-no{color:var(--ink-soft)}
+  .bow-panel{padding:0 11px 12px;border-top:1px solid var(--line);margin-top:2px}
+  .bow-panel label{margin-top:10px}
+  .bow-ops{margin-top:12px;padding-top:10px;border-top:1px dashed var(--line)}
+  .bow-stat{font-size:12.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:9px}
+  .bow-stat b{color:var(--ink)}
+
   /* ---------- 最近事項 ---------- */
   .ver{
     text-align:center;font-size:10px;color:var(--ink-soft);
@@ -579,7 +604,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v14';
+var APP_VERSION = 'v15';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -602,6 +627,12 @@ var state = {
   fullMoonPlayed: false,// 滿月自動動畫播咗未（每次開網頁一次）
   dutyOpen: null,       // 今日工作邊張卡展開咗
   repairFormOpen: false,// 今日工作頁嘅「報維修」表單開咗未
+  bow: null,            // 弓具資料
+  bowType: '',          // 弓種篩選
+  bowKg: '',            // 弓力篩選
+  bowQ: '',             // 弓具搜尋
+  bowPick: null,        // 揀緊借邊張弓
+  bowGuest: false,      // 係咪代訪客登記
   rotaEditingId: null,  // 正在編輯邊一行（'__new__' = 新增）
   builder: null         // 予定組合器狀態
 };
@@ -756,13 +787,22 @@ function dimHeader() {
 }
 
 /* ============ 導覽 ============ */
-var TABS_IN = [['today', '今日工作'], ['stock', '物資'], ['stats', '報告']];
+/* 第三個值 = 最低要求角色：'member' 會員以上，'ops' 組員以上 */
+var TABS_IN = [
+  ['today', '今日工作', 'member'],
+  ['bow',   '公家弓',   'member'],
+  ['stock', '物資',     'ops'],
+  ['stats', '報告',     'ops']
+];
+function visibleTabs() {
+  return TABS_IN.filter(function (t) { return t[2] === 'member' || isOps(); });
+}
 
 function renderNav() {
   var nav = document.getElementById('nav');
 
-  // 未登入 或 純會員：只有今日工作（＋登入／我的資料），唔使底部導覽
-  if (!state.auth || !isOps()) {
+  // 未登入：只有今日工作（＋登入），唔使底部導覽
+  if (!state.auth) {
     if (['login', 'me'].indexOf(state.tab) === -1) state.tab = 'today';
     nav.innerHTML = '';
     nav.style.display = 'none';
@@ -772,10 +812,11 @@ function renderNav() {
 
   nav.style.display = 'flex';
   document.body.classList.remove('nav-hidden');
+  var tabs = visibleTabs();
   // 'me' 冇底部掣，但係合法頁面
-  var valid = TABS_IN.some(function (t) { return t[0] === state.tab; }) || state.tab === 'me';
+  var valid = tabs.some(function (t) { return t[0] === state.tab; }) || state.tab === 'me';
   if (!valid) state.tab = 'today';
-  nav.innerHTML = TABS_IN.map(function (t) {
+  nav.innerHTML = tabs.map(function (t) {
     return '<button data-tab="' + t[0] + '"' + (t[0] === state.tab ? ' class="active"' : '') + '>' + t[1] + '</button>';
   }).join('');
   document.querySelectorAll('#nav button').forEach(function (b) {
@@ -792,6 +833,7 @@ function render() {
   if (state.tab === 'today') return renderToday();
   if (!state.auth) return renderLogin();
   if (state.tab === 'me') return renderMe();
+  if (state.tab === 'bow') return renderBow();   // 會員以上都用得
   if (!isOps()) return renderToday();      // 會員冇工務功能
   if (!state.ops) return loadOps();
   if (state.tab === 'stock') return renderStock();
@@ -1563,6 +1605,193 @@ function doChangePin() {
     btn.disabled = false; btn.textContent = '更改 PIN';
     toast('失敗：' + e.message);
   });
+}
+
+/* ============ 公家弓 ============ */
+
+function renderBow() {
+  if (!state.bow) {
+    main().innerHTML = '<div class="loading">載入中</div>';
+    call('getBowData', authPayload()).then(function (d) {
+      state.bow = d;
+      if (state.tab === 'bow') renderBow();
+    }).catch(function (e) {
+      main().innerHTML = '<div class="empty">載入失敗：' + esc(e.message) +
+        '<br><br><button class="ghost" onclick="state.bow=null;renderBow()">重試</button></div>';
+    });
+    return;
+  }
+
+  var d = state.bow;
+  var h = '';
+
+  /* 要保養嘅弓（組員以上先見到） */
+  if (d.isOps) {
+    var due = d.bows.filter(function (b) { return b.needService && b.status !== '停用'; });
+    if (due.length) {
+      h += '<div class="alert-banner"><b>🔧 ' + due.length + ' 張弓需要檢查</b>' +
+        '<div class="buy-list">' + due.map(function (b) {
+          return '<div class="buy-row"><span>' + esc(b.label) + '</span>' +
+            '<b>已借 ' + b.used + ' 次</b></div>';
+        }).join('') + '</div></div>';
+    }
+  }
+
+  /* 搜尋 + 篩選 */
+  h += '<input id="bowSearch" class="search" type="search" placeholder="搜尋編號、品牌…" ' +
+    'value="' + esc(state.bowQ || '') + '" oninput="onBowSearch(this.value)">';
+
+  h += '<div class="chips">' +
+    '<button class="chip-btn' + (!state.bowType ? ' on' : '') + '" onclick="setBowType(\'\')">全部</button>' +
+    d.types.map(function (t) {
+      return '<button class="chip-btn' + (state.bowType === t ? ' on' : '') +
+        '" onclick="setBowType(\'' + t + '\')">' + esc(t) + '</button>';
+    }).join('') + '</div>';
+
+  /* 弓力篩選 */
+  var kgs = [];
+  d.bows.forEach(function (b) { if (kgs.indexOf(b.kg) === -1) kgs.push(b.kg); });
+  kgs.sort(function (a, b) { return a - b; });
+  h += '<div class="chips sub">' +
+    '<button class="chip-btn' + (!state.bowKg ? ' on' : '') + '" onclick="setBowKg(\'\')">全部弓力</button>' +
+    kgs.map(function (k) {
+      return '<button class="chip-btn' + (String(state.bowKg) === String(k) ? ' on' : '') +
+        '" onclick="setBowKg(\'' + k + '\')">' + k + 'kg</button>';
+    }).join('') + '</div>';
+
+  h += '<div id="bowList"></div>';
+  main().innerHTML = h;
+  renderBowList();
+}
+
+function filteredBows() {
+  var q = String(state.bowQ || '').trim().toLowerCase();
+  return state.bow.bows.filter(function (b) {
+    if (state.bowType && b.type !== state.bowType) return false;
+    if (state.bowKg && String(b.kg) !== String(state.bowKg)) return false;
+    if (!q) return true;
+    return (b.id + ' ' + b.brand + ' ' + b.type + ' ' + b.kg).toLowerCase().indexOf(q) > -1;
+  });
+}
+
+function renderBowList() {
+  var box = document.getElementById('bowList');
+  if (!box) return;
+  var d = state.bow;
+  var list = filteredBows();
+
+  if (!list.length) {
+    box.innerHTML = '<div class="empty">搵唔到符合嘅弓</div>';
+    return;
+  }
+
+  var h = '';
+  d.types.forEach(function (t) {
+    var group = list.filter(function (b) { return b.type === t; });
+    if (!group.length) return;
+    h += '<div class="section-label">' + esc(t) + ' <span class="cnt2">' + group.length + '</span></div>';
+    h += '<div class="bow-grid">';
+    group.forEach(function (b) {
+      var picked = state.bowPick === b.id;
+      var cls = 'card bow' + (b.status !== '正常' ? ' off' : '') +
+        (b.needService ? ' due' : '') + (picked ? ' picked' : '');
+      h += '<div class="' + cls + '">' +
+        '<div class="bow-main" onclick="pickBow(\'' + esc(b.id) + '\')">' +
+        '<div class="bow-no">' + esc(b.id) + '</div>' +
+        '<div class="bow-info"><div class="bow-brand">' + esc(b.brand) + '</div>' +
+        '<div class="bow-meta">' + b.kg + 'kg' +
+        (b.status !== '正常' ? ' · ' + esc(b.status) : '') +
+        (d.isOps && b.needService ? ' · 待檢查' : '') + '</div></div>' +
+        '</div>' +
+        (picked ? bowPanel(b) : '') +
+        '</div>';
+    });
+    h += '</div>';
+  });
+  box.innerHTML = h;
+}
+
+/* 撳開一張弓之後嘅面板：借用 + （工務組）保養／狀態 */
+function bowPanel(b) {
+  var d = state.bow;
+  var h = '<div class="bow-panel" onclick="event.stopPropagation()">';
+
+  if (b.status === '正常') {
+    h += '<label>借用原因</label><select id="bwReason">' +
+      d.reasons.map(function (r) { return '<option>' + esc(r) + '</option>'; }).join('') +
+      '</select>';
+
+    h += '<label style="display:flex;align-items:center;gap:7px;margin-top:10px">' +
+      '<input type="checkbox" id="bwGuest" style="width:auto" ' +
+      (state.bowGuest ? 'checked' : '') + ' onchange="toggleGuest(this.checked)">' +
+      '<span>代訪客／其他人登記</span></label>';
+    if (state.bowGuest) {
+      h += '<input id="bwName" placeholder="借用人姓名">';
+    }
+
+    h += '<div style="margin-top:12px"><button class="primary" onclick="doBorrow(\'' +
+      esc(b.id) + '\')">確認借用</button></div>';
+  } else {
+    h += '<div class="empty" style="padding:12px">呢張弓' + esc(b.status) + '，借唔到</div>';
+  }
+
+  if (d.isOps) {
+    h += '<div class="bow-ops">' +
+      '<div class="bow-stat">累計借出 <b>' + b.total + '</b> 次' +
+      ' · 距下次檢查 <b>' + (b.left > 0 ? b.left + ' 次' : '已到') + '</b>' +
+      (b.lastService ? '<br>上次保養：' + esc(b.lastService) : '') + '</div>' +
+      '<div class="edit-row">' +
+      '<button class="ghost" onclick="doService(\'' + esc(b.id) + '\')">✓ 已保養</button>' +
+      (b.status === '正常'
+        ? '<button class="ghost" onclick="doBowStatus(\'' + esc(b.id) + '\',\'維修中\')">標記維修中</button>'
+        : '<button class="ghost" onclick="doBowStatus(\'' + esc(b.id) + '\',\'正常\')">回復正常</button>') +
+      '</div></div>';
+  }
+  return h + '</div>';
+}
+
+var bowSearchTimer = null;
+function onBowSearch(v) {
+  state.bowQ = v;
+  clearTimeout(bowSearchTimer);
+  bowSearchTimer = setTimeout(renderBowList, 180);
+}
+function setBowType(t) { state.bowType = t; state.bowPick = null; renderBow(); }
+function setBowKg(k) { state.bowKg = k; state.bowPick = null; renderBow(); }
+function pickBow(id) {
+  state.bowPick = (state.bowPick === id) ? null : id;
+  renderBowList();
+}
+function toggleGuest(on) { state.bowGuest = on; renderBowList(); }
+
+function doBorrow(id) {
+  var reason = document.getElementById('bwReason').value;
+  var name = state.bowGuest ? val('bwName') : '';
+  if (state.bowGuest && !name) return toast('請填借用人姓名');
+  toast('登記中…');
+  call('borrowBow', authPayload(), id, reason, name, '').then(function (r) {
+    if (!r.ok) return toast(r.msg);
+    toast('已登記借用 ' + r.label + (r.warn ? '｜' + r.warn : ''));
+    state.bowPick = null; state.bowGuest = false; state.bow = null;
+    renderBow();
+  }).catch(function (e) { toast('失敗：' + e.message); });
+}
+function doService(id) {
+  var note = prompt('保養備註（可留空）：');
+  if (note === null) return;
+  toast('更新中…');
+  call('serviceBow', authPayload(), id, note).then(function (r) {
+    if (!r.ok) return toast(r.msg);
+    toast('已記錄保養');
+    state.bow = null; renderBow();
+  }).catch(function (e) { toast('失敗：' + e.message); });
+}
+function doBowStatus(id, st) {
+  call('setBowStatus', authPayload(), id, st).then(function (r) {
+    if (!r.ok) return toast(r.msg);
+    toast('已改為「' + st + '」');
+    state.bow = null; renderBow();
+  }).catch(function (e) { toast('失敗：' + e.message); });
 }
 
 /* ============ 載入工務資料 ============ */
