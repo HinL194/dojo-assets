@@ -642,7 +642,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v18';
+var APP_VERSION = 'v19';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -965,7 +965,7 @@ function renderToday() {
     if (open) {
       h += '<div class="duty-body" onclick="event.stopPropagation()">';
       sch.days.forEach(function (dd) {
-        h += '<div class="svc-day">' + esc(dd.date) + '</div><div class="svc-bows">';
+        h += '<div class="svc-day">' + esc(String(dd.date).replace(/ .*$/, '')) + '</div><div class="svc-bows">';
         dd.bows.forEach(function (b) {
           if (b.done) {
             h += '<span class="svc-bow done">' + esc(b.id) + ' ✓</span>';
@@ -2449,14 +2449,18 @@ function bowStatRow(b) {
     '</div></div>' +
     (state.svcBow === b.id && state.svcFrom === 'stats' ? svcForm(b.id) : '');
 }
-function genSchedule() {
-  if (!confirm('生成並發佈下月排程？\n會用本月借用紀錄計算，並即刻喺今日工作頁顯示。')) return;
-  toast('生成中…');
-  call('generateSchedule', authPayload()).then(function (r) {
+function genSchedule(update) {
+  var msg = update
+    ? '按現況更新本期排程？\n已完成嘅弓保留唔郁，未完成嘅會按最新借用紀錄重新分配。'
+    : '生成並發佈下月排程？\n會用本月借用紀錄計算，並即刻喺今日工作頁顯示。';
+  if (!confirm(msg)) return;
+  toast(update ? '更新中…' : '生成中…');
+  call('generateSchedule', authPayload(), !!update).then(function (r) {
     if (!r.ok) return toast(r.msg);
     state.annText = r.announcement.replace(/\\n/g, '\n');
     state.ops = null; state.publicData = null;
-    toast('已發佈 ' + r.month + ' 排程');
+    toast((update ? '已更新 ' : '已發佈 ') + r.month + ' 排程' +
+      (r.skipped ? '（' + r.skipped + ' 張弓超出每日上限，留待下期）' : ''));
     render();
   }).catch(function (e) { toast('失敗：' + e.message); });
 }
@@ -2583,7 +2587,10 @@ function renderStats() {
     } else {
       h += '<div style="font-size:13.5px;color:var(--ink-soft);margin-bottom:8px">未有排程</div>';
     }
-    h += '<button class="ghost" style="width:100%" onclick="genSchedule()">生成並發佈下月排程</button>';
+    h += '<div class="edit-row">' +
+      '<button class="ghost" style="flex:1" onclick="genSchedule(false)">生成並發佈下月排程</button>' +
+      (d.schedule ? '<button class="ghost" style="flex:1" onclick="genSchedule(true)">🔄 按現況更新</button>' : '') +
+      '</div>';
     if (state.annText) {
       h += '<textarea id="annBox" rows="8" readonly style="margin-top:10px;font-size:12.5px">' +
         esc(state.annText) + '</textarea>' +
