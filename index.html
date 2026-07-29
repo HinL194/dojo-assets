@@ -466,6 +466,38 @@
   .status-btns button{flex:1;padding:8px 4px;font-size:13px;border-radius:8px;border:1px solid var(--line);background:#fff;font-family:inherit;cursor:pointer}
   .status-btns button.on{background:var(--ai);color:#fff;border-color:var(--ai)}
 
+  /* ---------- 保養回報 ---------- */
+  .svc-card .svc-prog{
+    font-size:12px;color:var(--ink-soft);margin-right:8px;
+    font-variant-numeric:tabular-nums;
+  }
+  .svc-day{
+    font-size:12px;color:var(--ink-soft);letter-spacing:.1em;
+    margin:10px 2px 6px;
+  }
+  .svc-day:first-child{margin-top:2px}
+  .svc-bows{display:flex;flex-wrap:wrap;gap:7px}
+  .svc-bow{
+    border:1px solid var(--ai);color:var(--ai);background:var(--card);
+    border-radius:8px;padding:7px 13px;font-size:14.5px;font-weight:700;
+    font-family:inherit;font-variant-numeric:tabular-nums;cursor:pointer;
+  }
+  .svc-bow:active{background:var(--paper)}
+  .svc-bow.done{
+    border-color:var(--line);color:var(--matsu);background:transparent;
+    cursor:default;font-weight:400;
+  }
+  .svc-hint{font-size:11.5px;color:var(--ink-soft);margin-top:10px}
+  .svc-form{
+    margin-top:11px;padding-top:10px;border-top:1px solid var(--line);
+  }
+  .svc-item{
+    display:flex;align-items:center;gap:9px;padding:7px 2px;
+    font-size:14px;cursor:pointer;margin:0;
+  }
+  .svc-item input{width:auto;margin:0}
+  textarea#annBox{width:100%;font-family:inherit;line-height:1.5;resize:vertical}
+
   .gradebox{
     width:115px;flex:0 0 auto;font-size:13.5px;padding:7px 6px;
     background:var(--card);border:1px solid var(--line);border-radius:8px;
@@ -610,7 +642,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v17';
+var APP_VERSION = 'v18';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -646,6 +678,10 @@ var state = {
   memberOpen: false,    // 報告頁嘅會員名單展開咗未
   memberQ: '',          // 會員名單搜尋
   bowAllStats: false,   // 報告頁弓具：睇全部定係只睇要留意嘅
+  svcCardOpen: false,   // 今日工作維修卡開合
+  svcBow: null,         // 回報緊邊張弓
+  svcFrom: null,        // 'today' | 'stats'
+  svcSel: {},           // 保養表單揀咗嘅項目
   rotaEditingId: null,  // 正在編輯邊一行（'__new__' = 新增）
   builder: null         // 予定組合器狀態
 };
@@ -909,10 +945,41 @@ function renderToday() {
   }
 
   /* 報維修（組員以上） */
-  if (isOps()) {
+  if (isReport()) {
     h += '<button class="repairbtn" onclick="toggleRepairForm()">🔧 報維修' +
       (state.repairFormOpen ? ' ✕' : '') + '</button>';
     if (state.repairFormOpen) h += repairFormCard();
+  }
+
+  /* 公家弓檢查維修卡（有排程未完成先出現；要登入先見到） */
+  if (state.auth && d.schedule && !d.schedule.complete) {
+    var sch = d.schedule;
+    var total = 0, done = 0;
+    sch.days.forEach(function (dd) { dd.bows.forEach(function (b) { total++; if (b.done) done++; }); });
+    var open = state.svcCardOpen;
+    h += '<div class="card duty svc-card' + (open ? ' open' : '') + '">' +
+      '<div class="duty-head" onclick="toggleSvcCard()">' +
+      '<span class="duty-name">🏹 公家弓檢查維修</span>' +
+      '<span class="svc-prog">' + done + '/' + total + '</span>' +
+      '<span class="caret' + (open ? ' up' : '') + '">⌄</span></div>';
+    if (open) {
+      h += '<div class="duty-body" onclick="event.stopPropagation()">';
+      sch.days.forEach(function (dd) {
+        h += '<div class="svc-day">' + esc(dd.date) + '</div><div class="svc-bows">';
+        dd.bows.forEach(function (b) {
+          if (b.done) {
+            h += '<span class="svc-bow done">' + esc(b.id) + ' ✓</span>';
+          } else {
+            h += '<button class="svc-bow" onclick="openSvc(\'' + esc(b.id) + '\',\'today\')">' +
+              esc(b.id) + '</button>';
+          }
+        });
+        h += '</div>';
+      });
+      if (state.svcBow) h += svcForm(state.svcBow);
+      h += '<p class="svc-hint">撳弓號登記已保養／檢查結果</p></div>';
+    }
+    h += '</div>';
   }
 
   h += '<div class="section-label">今日 · ' + esc(d.todayName) + '</div>';
@@ -984,6 +1051,57 @@ function dutyCard(r, i) {
   }
   return h + '</div>';
 }
+/* ---------- 保養回報（今日工作卡＋報告頁共用） ---------- */
+function openSvc(bowId, from) {
+  state.svcBow = (state.svcBow === bowId) ? null : bowId;
+  state.svcFrom = from;
+  state.svcSel = {};
+  if (from === 'today') renderToday(); else renderStats();
+}
+function svcToggle(item, checked) {
+  if (item === '不需要維修' && checked) state.svcSel = {};   // 互斥：清走其他
+  if (checked) {
+    if (item !== '不需要維修') delete state.svcSel['不需要維修'];
+    state.svcSel[item] = true;
+  } else {
+    delete state.svcSel[item];
+  }
+  if (state.svcFrom === 'today') renderToday(); else renderStats();
+}
+function svcForm(bowId) {
+  var items = (state.publicData && state.publicData.serviceItems) ||
+    ['不需要維修', '日輪', '中仕掛', '月輪', '更換新弦', '更換擋皮', '維修或更換弓袋'];
+  var h = '<div class="svc-form" onclick="event.stopPropagation()">' +
+    '<div class="rota-no">檢查結果（可多選）</div>';
+  items.forEach(function (it) {
+    var on = !!state.svcSel[it];
+    h += '<label class="svc-item"><input type="checkbox"' + (on ? ' checked' : '') +
+      ' onchange="svcToggle(\'' + it + '\',this.checked)"><span>' + esc(it) + '</span></label>';
+  });
+  h += '<label style="margin-top:8px">其他（自由填寫）</label><input id="svcOther">' +
+    '<label>備註（選填）</label><input id="svcNote">' +
+    '<div class="edit-row" style="margin-top:12px">' +
+    '<button class="primary" onclick="submitSvc(\'' + esc(bowId) + '\')">提交</button>' +
+    '<button class="ghost" onclick="openSvc(\'' + esc(bowId) + '\',\'' + (state.svcFrom || 'stats') + '\')">取消</button>' +
+    '</div></div>';
+  return h;
+}
+function submitSvc(bowId) {
+  var items = Object.keys(state.svcSel || {});
+  var other = val('svcOther'), note = val('svcNote');
+  if (!items.length && !other) return toast('請揀檢查結果');
+  toast('提交中…');
+  call('serviceBow', authPayload(), bowId, items, note, other).then(function (r) {
+    if (!r.ok) return toast(r.msg);
+    toast(r.monthComplete ? '已記錄，本月檢查全部完成 ✓' : '已記錄保養');
+    state.svcBow = null; state.svcSel = {};
+    state.publicData = null; state.ops = null; state.bow = null;
+    render();
+  }).catch(function (e) { toast('失敗：' + e.message); });
+}
+
+function toggleSvcCard() { state.svcCardOpen = !state.svcCardOpen; renderToday(); }
+
 function toggleRepairForm() {
   state.repairFormOpen = !state.repairFormOpen;
   renderToday();
@@ -1579,7 +1697,8 @@ function renderMe() {
   var h = '<div class="section-label">我的資料</div><div class="card">' +
     '<div class="kv"><span class="k">姓名</span><span class="v">' + esc(a.name) + '</span></div>' +
     '<div class="kv"><span class="k">會員編號</span><span class="v">' + esc(a.id) + '</span></div>' +
-    '<div class="kv"><span class="k">角色</span><span class="v">' + esc(a.role) + '</span></div>' +
+    (['館長', '組長', '副組長', '導師'].indexOf(a.role) > -1
+      ? '<div class="kv"><span class="k">角色</span><span class="v">' + esc(a.role) + '</span></div>' : '') +
     '</div>' +
     '<p style="font-size:12.5px;color:var(--ink-soft);margin:2px 2px 0">' +
     '姓名、編號、角色由工務組組長喺名單設定，如有錯請搵工務組組長更改。</p>';
@@ -1876,16 +1995,6 @@ function doBorrow(id) {
     toast('已登記借用 ' + r.label + (r.warn ? '｜' + r.warn : ''));
     state.bowPick = null; state.bowGuest = false; state.bow = null;
     renderBow();
-  }).catch(function (e) { toast('失敗：' + e.message); });
-}
-function doService(id) {
-  var note = prompt('保養備註（可留空）：');
-  if (note === null) return;
-  toast('更新中…');
-  call('serviceBow', authPayload(), id, note).then(function (r) {
-    if (!r.ok) return toast(r.msg);
-    toast('已記錄保養');
-    state.bow = null; renderBow();
   }).catch(function (e) { toast('失敗：' + e.message); });
 }
 function doBowStatus(id, st) {
@@ -2333,12 +2442,31 @@ function bowStatRow(b) {
     (b.left > 0 ? '距下次檢查 ' + b.left + ' 次' : '已到檢查點') +
     (b.lastService ? '<br>上次保養：' + esc(b.lastService) : '') + '</div></div>' +
     '<div class="edit-row" style="flex:0 0 auto;flex-direction:column;gap:5px">' +
-    '<button class="ghost" onclick="doService(\'' + esc(b.id) + '\')">✓ 已保養</button>' +
+    '<button class="ghost" onclick="openSvc(\'' + esc(b.id) + '\',\'stats\')">✓ 已保養</button>' +
     (b.status === '正常'
       ? '<button class="ghost" onclick="doBowStatus(\'' + esc(b.id) + '\',\'維修中\')">維修中</button>'
       : '<button class="ghost" onclick="doBowStatus(\'' + esc(b.id) + '\',\'正常\')">回復正常</button>') +
-    '</div></div>';
+    '</div></div>' +
+    (state.svcBow === b.id && state.svcFrom === 'stats' ? svcForm(b.id) : '');
 }
+function genSchedule() {
+  if (!confirm('生成並發佈下月排程？\n會用本月借用紀錄計算，並即刻喺今日工作頁顯示。')) return;
+  toast('生成中…');
+  call('generateSchedule', authPayload()).then(function (r) {
+    if (!r.ok) return toast(r.msg);
+    state.annText = r.announcement.replace(/\\n/g, '\n');
+    state.ops = null; state.publicData = null;
+    toast('已發佈 ' + r.month + ' 排程');
+    render();
+  }).catch(function (e) { toast('失敗：' + e.message); });
+}
+function copyAnn() {
+  var box = document.getElementById('annBox');
+  box.select();
+  try { document.execCommand('copy'); toast('已複製'); }
+  catch (e) { toast('請手動長按複製'); }
+}
+
 function toggleBowAll() { state.bowAllStats = !state.bowAllStats; renderStats(); }
 
 /* ---------- 報告頁：會員名單 ---------- */
@@ -2443,6 +2571,30 @@ function renderStats() {
     if (state.memberOpen) h += memberListPanel();
   }
 
+  /* ---- 排程進度＋月度公告（組長以上） ---- */
+  if (isLeader()) {
+    h += '<div class="section-label">月度保養公告</div><div class="card">';
+    if (d.schedule) {
+      var t2 = 0, dn2 = 0;
+      d.schedule.days.forEach(function (dd) { dd.bows.forEach(function (b) { t2++; if (b.done) dn2++; }); });
+      h += '<div style="font-size:13.5px;margin-bottom:8px">' +
+        esc(d.schedule.month) + ' 排程：' + dn2 + '/' + t2 + ' 完成' +
+        (d.schedule.complete ? ' ✓' : '') + '</div>';
+    } else {
+      h += '<div style="font-size:13.5px;color:var(--ink-soft);margin-bottom:8px">未有排程</div>';
+    }
+    h += '<button class="ghost" style="width:100%" onclick="genSchedule()">生成並發佈下月排程</button>';
+    if (state.annText) {
+      h += '<textarea id="annBox" rows="8" readonly style="margin-top:10px;font-size:12.5px">' +
+        esc(state.annText) + '</textarea>' +
+        '<button class="ghost" style="width:100%;margin-top:6px" onclick="copyAnn()">複製公告</button>';
+    }
+    h += '</div>';
+  }
+
+  /* ---- 以下導師唔會見到 ---- */
+  if (!isOps()) { main().innerHTML = h; return; }
+
   /* ---- 公家弓保養狀況 ---- */
   var bows = d.bows || [];
   if (bows.length) {
@@ -2462,9 +2614,6 @@ function renderStats() {
     h += '<button class="ghost" style="width:100%;margin-top:2px" onclick="toggleBowAll()">' +
       (state.bowAllStats ? '只睇需要留意嘅' : '睇全部 ' + bows.length + ' 張弓') + '</button>';
   }
-
-  /* ---- 以下只有工務組先見到（導師到此為止） ---- */
-  if (!isOps()) { main().innerHTML = h; return; }
 
   /* ---- 維修紀錄（原本喺獨立分頁，而家歸埋入嚟；報告新維修改咗喺今日工作頁） ---- */
   h += '<div class="section-label">維修紀錄</div>';
