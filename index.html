@@ -498,6 +498,22 @@
   .svc-item input{width:auto;margin:0}
   textarea#annBox{width:100%;font-family:inherit;line-height:1.5;resize:vertical}
 
+  /* ---------- 會員名單 ---------- */
+  .card.item.mem{flex-wrap:wrap}
+  .card.item.mem.off{opacity:.55}
+  .card.item.mem.dirty{border-color:var(--ai);border-left-width:3px}
+  .mem-editor{
+    flex:1 0 100%;margin-top:10px;padding-top:11px;
+    border-top:1px solid var(--line);
+  }
+  .mem-editor label{margin-top:10px}
+  .mem-editor label:first-child{margin-top:0}
+  .savebar-inline{
+    position:sticky;bottom:6px;display:flex;gap:8px;margin-top:12px;
+    background:var(--paper);padding:8px 0;
+  }
+  .savebar-inline .primary{flex:1}
+
   .gradebox{
     width:115px;flex:0 0 auto;font-size:13.5px;padding:7px 6px;
     background:var(--card);border:1px solid var(--line);border-radius:8px;
@@ -642,7 +658,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v19';
+var APP_VERSION = 'v20';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -677,6 +693,11 @@ var state = {
   memberList: null,     // 會員名單資料
   memberOpen: false,    // 報告頁嘅會員名單展開咗未
   memberQ: '',          // 會員名單搜尋
+  memberEdits: {},      // 改咗但未儲存嘅會員資料
+  memberOpenId: null,   // 展開緊邊個會員
+  memberShowAll: false, // 連非活躍會員一齊顯示
+  addMemberOpen: false,
+  examYear: {},         // 每個會員嘅升段審查年份篩選
   bowAllStats: false,   // 報告頁弓具：睇全部定係只睇要留意嘅
   svcCardOpen: false,   // 今日工作維修卡開合
   svcBow: null,         // 回報緊邊張弓
@@ -2476,6 +2497,9 @@ function toggleBowAll() { state.bowAllStats = !state.bowAllStats; renderStats();
 /* ---------- 報告頁：會員名單 ---------- */
 function toggleMemberList() {
   state.memberOpen = !state.memberOpen;
+  if (!state.memberOpen) {
+    state.memberEdits = {}; state.memberOpenId = null; state.addMemberOpen = false;
+  }
   if (state.memberOpen && !state.memberList) {
     call('getMemberList', authPayload()).then(function (d) {
       state.memberList = d;
@@ -2487,45 +2511,209 @@ function toggleMemberList() {
 function memberListPanel() {
   var d = state.memberList;
   if (!d) return '<div class="loading">載入中</div>';
+
   var q = String(state.memberQ || '').trim().toLowerCase();
   var list = d.members.filter(function (m) {
+    if (!state.memberShowAll && !m.active) return false;
     if (!q) return true;
     return (m.id + ' ' + m.name + ' ' + m.grade).toLowerCase().indexOf(q) > -1;
   });
-  var h = '<div class="card" style="margin-bottom:12px">' +
+  var inactive = d.members.filter(function (m) { return !m.active; }).length;
+  var dirty = Object.keys(state.memberEdits || {}).length;
+
+  var h = '<div class="card" style="margin-bottom:10px">' +
     '<input class="search" type="search" placeholder="搜尋編號、姓名、級位…" ' +
     'value="' + esc(state.memberQ || '') + '" oninput="onMemberSearch(this.value)" style="margin-bottom:0">' +
     '</div>';
 
+  h += '<div class="edit-row" style="margin-bottom:10px">' +
+    '<button class="chip-btn' + (state.memberShowAll ? ' on' : '') + '" onclick="toggleShowAll()">' +
+    (state.memberShowAll ? '只睇活躍' : '連非活躍（' + inactive + '）') + '</button>' +
+    (d.canEditActive ? '<button class="chip-btn ord" onclick="openAddMember()">＋ 新增會員</button>' : '') +
+    '</div>';
+
+  if (state.addMemberOpen) h += addMemberForm();
+
   if (!list.length) return h + '<div class="empty">搵唔到</div>';
 
-  h += '<div id="memberRows">';
   list.forEach(function (m) {
-    h += '<div class="card item"><div class="info">' +
+    var e = (state.memberEdits || {})[m.id];
+    var cur = e || m;
+    var open = state.memberOpenId === m.id;
+    h += '<div class="card item mem' + (m.active ? '' : ' off') + (e ? ' dirty' : '') + '">' +
+      '<div class="info" onclick="toggleMemberRow(\'' + esc(m.id) + '\')" style="cursor:pointer">' +
       '<div class="name">' + esc(m.name) +
-      ' <span style="color:var(--ink-soft);font-size:12px">' + esc(m.id) + '</span></div></div>' +
-      '<select class="gradebox" onchange="saveGrade(\'' + esc(m.id) + '\',this.value)">' +
-      '<option value="">— 未填 —</option>' +
-      d.grades.map(function (g) {
-        return '<option value="' + esc(g) + '"' + (m.grade === g ? ' selected' : '') + '>' + esc(g) + '</option>';
-      }).join('') +
-      '</select></div>';
+      ' <span style="color:var(--ink-soft);font-size:12px">' + esc(m.id) + '</span>' +
+      (m.active ? '' : '<span class="multi">非活躍</span>') + '</div>' +
+      '<div class="meta">' + (esc(cur.grade) || '—') +
+      (cur.promoDate ? ' · ' + esc(cur.promoDate) : '') +
+      ' · 弓 ' + cur.bows.filter(function (b) { return b.color || b.mei || b.kg; }).length +
+      '／箭筒 ' + cur.quivers.filter(function (x) { return x; }).length + '</div></div>' +
+      '<span class="caret' + (open ? ' up' : '') + '" onclick="toggleMemberRow(\'' + esc(m.id) + '\')">⌄</span>' +
+      '</div>';
+    if (open) h += memberEditor(m, cur, d);
   });
+
+  if (dirty) {
+    h += '<div class="savebar-inline">' +
+      '<button class="primary" onclick="saveMemberEdits()">儲存 ' + dirty + ' 項改動</button>' +
+      '<button class="ghost" onclick="cancelMemberEdits()">取消</button></div>';
+  }
+  return h;
+}
+
+/* 一個會員嘅編輯區 */
+function memberEditor(m, cur, d) {
+  var ro = !d.canEditGrade;
+  var h = '<div class="mem-editor">';
+
+  /* 級位段位 */
+  h += '<label>級位／段位</label>' +
+    '<select ' + (ro ? 'disabled' : '') + ' onchange="editMember(\'' + esc(m.id) + '\',\'grade\',this.value)">' +
+    '<option value="">— 未填 —</option>' +
+    d.grades.map(function (g) {
+      return '<option value="' + esc(g) + '"' + (cur.grade === g ? ' selected' : '') + '>' + esc(g) + '</option>';
+    }).join('') + '</select>';
+
+  /* 升段審查：先揀年份再揀審查名 */
+  var years = [];
+  d.exams.forEach(function (x) { if (x.year && years.indexOf(x.year) === -1) years.push(x.year); });
+  years.sort().reverse();
+  var selYear = state.examYear[m.id] ||
+    (d.exams.filter(function (x) { return x.name === cur.exam; })[0] || {}).year || '';
+  h += '<label>升段審查</label><div class="edit-row">' +
+    '<select ' + (ro ? 'disabled' : '') + ' style="flex:0 0 88px" onchange="pickExamYear(\'' + esc(m.id) + '\',this.value)">' +
+    '<option value="">年份</option>' +
+    years.map(function (y) {
+      return '<option value="' + y + '"' + (selYear === y ? ' selected' : '') + '>' + y + '</option>';
+    }).join('') + '</select>' +
+    '<select ' + (ro ? 'disabled' : '') + ' style="flex:1" onchange="pickExam(\'' + esc(m.id) + '\',this.value)">' +
+    '<option value="">— 未填 —</option>' +
+    d.exams.filter(function (x) { return !selYear || x.year === selYear; }).map(function (x) {
+      return '<option value="' + esc(x.name) + '"' + (cur.exam === x.name ? ' selected' : '') + '>' +
+        esc(x.name) + '</option>';
+    }).join('') + '</select></div>';
+
+  h += '<label>升段日子</label>' +
+    '<input type="date" ' + (ro ? 'disabled' : '') + ' value="' + esc(cur.promoDate || '') + '" ' +
+    'onchange="editMember(\'' + esc(m.id) + '\',\'promoDate\',this.value)">';
+
+  /* 自有弓 */
+  h += '<div class="rota-no" style="margin-top:14px">自有弓（最多 3 張）</div>';
+  [0, 1, 2].forEach(function (i) {
+    var b = cur.bows[i] || {};
+    h += '<div class="edit-row" style="margin-bottom:6px">' +
+      '<input style="flex:1" placeholder="顏色" ' + (ro ? 'disabled' : '') + ' value="' + esc(b.color || '') + '" ' +
+      'onchange="editBow(\'' + esc(m.id) + '\',' + i + ',\'color\',this.value)">' +
+      '<input style="flex:1.3" placeholder="銘" ' + (ro ? 'disabled' : '') + ' value="' + esc(b.mei || '') + '" ' +
+      'onchange="editBow(\'' + esc(m.id) + '\',' + i + ',\'mei\',this.value)">' +
+      '<input style="flex:0 0 62px" type="number" inputmode="decimal" placeholder="kg" ' + (ro ? 'disabled' : '') +
+      ' value="' + esc(b.kg || '') + '" onchange="editBow(\'' + esc(m.id) + '\',' + i + ',\'kg\',this.value)">' +
+      '</div>';
+  });
+
+  /* 箭筒 */
+  h += '<div class="rota-no" style="margin-top:10px">箭筒（最多 3 個）</div><div class="edit-row">';
+  [0, 1, 2].forEach(function (i) {
+    h += '<input style="flex:1" placeholder="顏色" ' + (ro ? 'disabled' : '') +
+      ' value="' + esc(cur.quivers[i] || '') + '" ' +
+      'onchange="editQuiver(\'' + esc(m.id) + '\',' + i + ',this.value)">';
+  });
+  h += '</div>';
+
+  /* 活躍 */
+  if (d.canEditActive) {
+    h += '<label class="svc-item" style="margin-top:12px">' +
+      '<input type="checkbox"' + (cur.active ? ' checked' : '') +
+      ' onchange="editMember(\'' + esc(m.id) + '\',\'active\',this.checked)">' +
+      '<span>活躍會員</span></label>';
+  }
+  if (ro) h += '<p class="svc-hint">你冇權限編輯呢啲資料</p>';
   return h + '</div>';
 }
+
+function addMemberForm() {
+  return '<div class="card ordpanel"><div class="rota-no">新增會員</div>' +
+    '<label>會員編號</label><input id="nmId" inputmode="numeric">' +
+    '<label>姓名</label><input id="nmName">' +
+    '<label>PIN</label><input id="nmPin" inputmode="numeric">' +
+    '<label>角色</label><select id="nmRole">' +
+    ['會員', '組員', '導師', '副組長', '組長', '館長'].map(function (r) {
+      return '<option' + (r === '會員' ? ' selected' : '') + '>' + r + '</option>';
+    }).join('') + '</select>' +
+    '<div class="edit-row" style="margin-top:12px">' +
+    '<button class="primary" onclick="submitAddMember()">新增</button>' +
+    '<button class="ghost" onclick="openAddMember()">取消</button></div></div>';
+}
+
+/* ---- 編輯狀態（改咗先存喺記憶體，撳儲存先一次過交） ---- */
+function memDraft(id) {
+  if (!state.memberEdits[id]) {
+    var m = state.memberList.members.filter(function (x) { return x.id === id; })[0];
+    state.memberEdits[id] = {
+      id: id, grade: m.grade, promoDate: m.promoDate, exam: m.exam, active: m.active,
+      bows: m.bows.map(function (b) { return { color: b.color, mei: b.mei, kg: b.kg }; }),
+      quivers: m.quivers.slice()
+    };
+  }
+  return state.memberEdits[id];
+}
+function editMember(id, field, v) { memDraft(id)[field] = v; renderStats(); }
+function editBow(id, i, field, v) { memDraft(id).bows[i][field] = v; renderStats(); }
+function editQuiver(id, i, v) { memDraft(id).quivers[i] = v; renderStats(); }
+function pickExamYear(id, y) { state.examYear[id] = y; renderStats(); }
+function pickExam(id, name) {
+  var d = memDraft(id);
+  d.exam = name;
+  var ex = state.memberList.exams.filter(function (x) { return x.name === name; })[0];
+  if (ex && ex.date) d.promoDate = ex.date;   // 揀咗審查自動填返日子，仍然改得
+  renderStats();
+}
+function toggleMemberRow(id) {
+  state.memberOpenId = (state.memberOpenId === id) ? null : id;
+  renderStats();
+}
+function toggleShowAll() { state.memberShowAll = !state.memberShowAll; renderStats(); }
+function cancelMemberEdits() { state.memberEdits = {}; renderStats(); }
+
+function saveMemberEdits() {
+  var changes = Object.keys(state.memberEdits).map(function (k) { return state.memberEdits[k]; });
+  if (!changes.length) return;
+  toast('儲存中…');
+  call('saveMembers', authPayload(), changes).then(function (r) {
+    if (!r.ok) return toast(r.msg);
+    toast('已儲存 ' + r.saved + ' 項');
+    state.memberEdits = {}; state.memberList = null;
+    call('getMemberList', authPayload()).then(function (d) {
+      state.memberList = d; renderStats();
+    });
+  }).catch(function (e) { toast('失敗：' + e.message); });
+}
+
+function openAddMember() {
+  state.addMemberOpen = !state.addMemberOpen;
+  renderStats();
+}
+function submitAddMember() {
+  var f = { id: val('nmId'), name: val('nmName'), pin: val('nmPin'),
+            role: document.getElementById('nmRole').value };
+  if (!f.id || !f.name || !f.pin) return toast('請填齊編號、姓名同 PIN');
+  toast('新增中…');
+  call('addMember', authPayload(), f).then(function (r) {
+    if (!r.ok) return toast(r.msg);
+    toast('已新增 ' + f.name);
+    state.addMemberOpen = false; state.memberList = null;
+    call('getMemberList', authPayload()).then(function (d) {
+      state.memberList = d; renderStats();
+    });
+  }).catch(function (e) { toast('失敗：' + e.message); });
+}
+
 var memberSearchTimer = null;
 function onMemberSearch(v) {
   state.memberQ = v;
   clearTimeout(memberSearchTimer);
   memberSearchTimer = setTimeout(renderStats, 200);
-}
-function saveGrade(id, grade) {
-  call('updateMemberGrade', authPayload(), id, grade).then(function (r) {
-    if (!r.ok) return toast(r.msg);
-    var m = state.memberList.members.filter(function (x) { return x.id === id; })[0];
-    if (m) m.grade = grade;
-    toast('已更新');
-  }).catch(function (e) { toast('失敗：' + e.message); });
 }
 
 /* 動作分色：紅＝要跟進，綠＝完成，藍＝日常 */
