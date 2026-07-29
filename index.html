@@ -467,7 +467,9 @@
   .status-btns button.on{background:var(--ai);color:#fff;border-color:var(--ai)}
 
   .gradebox{
-    width:110px;flex:0 0 auto;text-align:center;font-size:13.5px;padding:7px 6px;
+    width:115px;flex:0 0 auto;font-size:13.5px;padding:7px 6px;
+    background:var(--card);border:1px solid var(--line);border-radius:8px;
+    font-family:inherit;color:var(--ink);cursor:pointer;
   }
 
   /* ---------- 公家弓 ---------- */
@@ -2361,9 +2363,7 @@ function memberListPanel() {
   var h = '<div class="card" style="margin-bottom:12px">' +
     '<input class="search" type="search" placeholder="搜尋編號、姓名、級位…" ' +
     'value="' + esc(state.memberQ || '') + '" oninput="onMemberSearch(this.value)" style="margin-bottom:0">' +
-    '<datalist id="gradeList">' + d.grades.map(function (g) {
-      return '<option value="' + esc(g) + '">';
-    }).join('') + '</datalist></div>';
+    '</div>';
 
   if (!list.length) return h + '<div class="empty">搵唔到</div>';
 
@@ -2372,9 +2372,12 @@ function memberListPanel() {
     h += '<div class="card item"><div class="info">' +
       '<div class="name">' + esc(m.name) +
       ' <span style="color:var(--ink-soft);font-size:12px">' + esc(m.id) + '</span></div></div>' +
-      '<input class="gradebox" list="gradeList" value="' + esc(m.grade) + '" ' +
-      'placeholder="級位／段位" ' +
-      'onchange="saveGrade(\'' + esc(m.id) + '\',this.value)"></div>';
+      '<select class="gradebox" onchange="saveGrade(\'' + esc(m.id) + '\',this.value)">' +
+      '<option value="">— 未填 —</option>' +
+      d.grades.map(function (g) {
+        return '<option value="' + esc(g) + '"' + (m.grade === g ? ' selected' : '') + '>' + esc(g) + '</option>';
+      }).join('') +
+      '</select></div>';
   });
   return h + '</div>';
 }
