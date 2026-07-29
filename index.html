@@ -483,6 +483,10 @@
     font-family:inherit;font-variant-numeric:tabular-nums;cursor:pointer;
   }
   .svc-bow:active{background:var(--paper)}
+  .svc-bow.active{
+    background:var(--ai);color:#F2EFE6;border-color:var(--ai);
+    box-shadow:0 2px 8px rgba(27,52,80,.25);
+  }
   .svc-bow.done{
     border-color:var(--line);color:var(--matsu);background:transparent;
     cursor:default;font-weight:400;
@@ -676,7 +680,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v23';
+var APP_VERSION = 'v24';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -710,7 +714,10 @@ var state = {
   reasonDraft: null,
   memberList: null,     // 會員名單資料
   memberOpen: false,    // 報告頁嘅會員名單展開咗未
-  memberQ: '',          // 會員名單搜尋
+  memberQ: '',          // 會員名單搜尋（已套用）
+  memberQRaw: '',       // 輸入框入面打緊嘅字（未撳搜尋）
+  examOther: {},        // 邊個會員剔咗「其他（自行輸入）」
+  examDate: {},         // 用日子反查嗰陣，篩選審查清單用
   memberEdits: {},      // 改咗但未儲存嘅會員資料
   memberOpenId: null,   // 展開緊邊個會員
   memberShowAll: false, // 連非活躍會員一齊顯示
@@ -1012,7 +1019,8 @@ function renderToday() {
           if (b.done) {
             h += '<span class="svc-bow done">' + esc(b.id) + ' ✓</span>';
           } else {
-            h += '<button class="svc-bow" onclick="openSvc(\'' + esc(b.id) + '\',\'today\')">' +
+            h += '<button class="svc-bow' + (state.svcBow === b.id ? ' active' : '') +
+              '" onclick="openSvc(\'' + esc(b.id) + '\',\'today\')">' +
               esc(b.id) + '</button>';
           }
         });
@@ -1862,7 +1870,8 @@ function clearSession_() {
   state.rotaOpen = false; state.bowType = ''; state.bowKg = ''; state.bowQ = '';
   state.bowPick = null; state.bowGuest = false; state.bowEdit = null;
   state.reasonOpen = false; state.bowAllStats = false; state.svcCardOpen = false;
-  state.memberOpen = false; state.memberQ = ''; state.memberOpenId = null;
+  state.memberOpen = false; state.memberQ = ''; state.memberQRaw = '';
+  state.memberOpenId = null; state.examOther = {}; state.examDate = {};
   state.memberShowAll = false; state.addMemberOpen = false; state.examYear = {};
   state.annText = null;
 }
@@ -2620,6 +2629,7 @@ function toggleMemberList() {
   state.memberOpen = !state.memberOpen;
   if (!state.memberOpen) {
     state.memberEdits = {}; state.memberOpenId = null; state.addMemberOpen = false;
+    state.memberQ = ''; state.memberQRaw = ''; state.examOther = {}; state.examDate = {};
   }
   if (state.memberOpen && !state.memberList) {
     call('getMemberList', authPayload()).then(function (d) {
@@ -2642,10 +2652,14 @@ function memberListPanel() {
   var inactive = d.members.filter(function (m) { return !m.active; }).length;
   var dirty = Object.keys(state.memberEdits || {}).length;
 
-  var h = '<div class="card" style="margin-bottom:10px">' +
-    '<input class="search" type="search" placeholder="搜尋編號、姓名、級位…" ' +
-    'value="' + esc(state.memberQ || '') + '" oninput="onMemberSearch(this.value)" style="margin-bottom:0">' +
-    '</div>';
+  var h = '<div class="card" style="margin-bottom:10px"><div class="edit-row">' +
+    '<input id="memQBox" class="search" type="search" placeholder="搜尋編號、姓名、級位…" ' +
+    'style="margin-bottom:0;flex:1" value="' + esc(state.memberQRaw || '') + '" ' +
+    'oninput="state.memberQRaw = this.value" ' +
+    'onkeydown="if(event.key===\'Enter\')doMemberSearch()">' +
+    '<button class="ghost" style="flex:0 0 auto" onclick="doMemberSearch()">搜尋</button>' +
+    (state.memberQ ? '<button class="ghost" style="flex:0 0 auto" onclick="clearMemberSearch()">✕</button>' : '') +
+    '</div></div>';
 
   h += '<div class="edit-row" style="margin-bottom:10px">' +
     '<button class="chip-btn' + (state.memberShowAll ? ' on' : '') + '" onclick="toggleShowAll()">' +
@@ -2696,28 +2710,59 @@ function memberEditor(m, cur, d) {
       return '<option value="' + esc(g) + '"' + (cur.grade === g ? ' selected' : '') + '>' + esc(g) + '</option>';
     }).join('') + '</select>';
 
-  /* 升段審查：先揀年份再揀審查名 */
-  var years = [];
-  d.exams.forEach(function (x) { if (x.year && years.indexOf(x.year) === -1) years.push(x.year); });
-  years.sort().reverse();
-  var selYear = state.examYear[m.id] ||
-    (d.exams.filter(function (x) { return x.name === cur.exam; })[0] || {}).year || '';
-  h += '<label>升段審查</label><div class="edit-row">' +
-    '<select ' + (ro ? 'disabled' : '') + ' style="flex:0 0 88px" onchange="pickExamYear(\'' + esc(m.id) + '\',this.value)">' +
-    '<option value="">年份</option>' +
-    years.map(function (y) {
-      return '<option value="' + y + '"' + (selYear === y ? ' selected' : '') + '>' + y + '</option>';
-    }).join('') + '</select>' +
-    '<select ' + (ro ? 'disabled' : '') + ' style="flex:1" onchange="pickExam(\'' + esc(m.id) + '\',this.value)">' +
-    '<option value="">— 未填 —</option>' +
-    d.exams.filter(function (x) { return !selYear || x.year === selYear; }).map(function (x) {
-      return '<option value="' + esc(x.name) + '"' + (cur.exam === x.name ? ' selected' : '') + '>' +
-        esc(x.name) + '</option>';
-    }).join('') + '</select></div>';
+  /* 升段審查 */
+  var other = !!state.examOther[m.id];
+  h += '<label class="svc-item" style="margin-top:12px">' +
+    '<input type="checkbox"' + (other ? ' checked' : '') + (ro ? ' disabled' : '') +
+    ' onchange="toggleExamOther(\'' + esc(m.id) + '\',this.checked)">' +
+    '<span>升段審查：其他（自行輸入）</span></label>';
 
-  h += '<label>升段日子</label>' +
-    '<input type="date" ' + (ro ? 'disabled' : '') + ' value="' + esc(cur.promoDate || '') + '" ' +
-    'onchange="editMember(\'' + esc(m.id) + '\',\'promoDate\',this.value)">';
+  if (other) {
+    /* 自行輸入：唔受設定清單限制 */
+    h += '<label>審查名稱</label>' +
+      '<input ' + (ro ? 'disabled' : '') + ' placeholder="例：2024年度昇段審査" ' +
+      'value="' + esc(cur.exam || '') + '" ' +
+      'onchange="editMember(\'' + esc(m.id) + '\',\'exam\',this.value)">' +
+      '<label>升段日子</label>' +
+      '<input type="date" ' + (ro ? 'disabled' : '') + ' value="' + esc(cur.promoDate || '') + '" ' +
+      'onchange="editMember(\'' + esc(m.id) + '\',\'promoDate\',this.value)">';
+  } else {
+    /* 由清單揀：年份 → 審查名。填日子亦會反查返上面兩個下拉 */
+    var years = [];
+    d.exams.forEach(function (x) { if (x.year && years.indexOf(x.year) === -1) years.push(x.year); });
+    years.sort().reverse();
+
+    var byDate = state.examDate[m.id] || '';
+    var selYear = byDate ? (byDate.match(/^(\d{4})/) || [])[1] || '' :
+      (state.examYear[m.id] ||
+       (d.exams.filter(function (x) { return x.name === cur.exam; })[0] || {}).year || '');
+
+    var pool = d.exams.filter(function (x) {
+      if (byDate) return x.date === byDate;          // 填咗日子 → 只列當日嘅審查
+      return !selYear || x.year === selYear;         // 否則按年份
+    });
+
+    h += '<label>升段審查</label><div class="edit-row">' +
+      '<select ' + (ro ? 'disabled' : '') + ' style="flex:0 0 88px" onchange="pickExamYear(\'' + esc(m.id) + '\',this.value)">' +
+      '<option value="">年份</option>' +
+      years.map(function (y) {
+        return '<option value="' + y + '"' + (selYear === y ? ' selected' : '') + '>' + y + '</option>';
+      }).join('') + '</select>' +
+      '<select ' + (ro ? 'disabled' : '') + ' style="flex:1" onchange="pickExam(\'' + esc(m.id) + '\',this.value)">' +
+      '<option value="">— 未填 —</option>' +
+      pool.map(function (x) {
+        return '<option value="' + esc(x.name) + '"' + (cur.exam === x.name ? ' selected' : '') + '>' +
+          esc(x.name) + '</option>';
+      }).join('') + '</select></div>';
+
+    if (byDate && !pool.length) {
+      h += '<p class="svc-hint">' + esc(byDate) + ' 冇對應嘅審查，可以剔「其他」自行輸入</p>';
+    }
+
+    h += '<label>升段日子</label>' +
+      '<input type="date" ' + (ro ? 'disabled' : '') + ' value="' + esc(cur.promoDate || '') + '" ' +
+      'onchange="pickPromoDate(\'' + esc(m.id) + '\',this.value)">';
+  }
 
   /* 自有弓 */
   h += '<div class="rota-no" style="margin-top:14px">自有弓（最多 3 張）</div>';
@@ -2782,10 +2827,31 @@ function memDraft(id) {
 function editMember(id, field, v) { memDraft(id)[field] = v; renderStats(); }
 function editBow(id, i, field, v) { memDraft(id).bows[i][field] = v; renderStats(); }
 function editQuiver(id, i, v) { memDraft(id).quivers[i] = v; renderStats(); }
-function pickExamYear(id, y) { state.examYear[id] = y; renderStats(); }
+function pickExamYear(id, y) {
+  state.examYear[id] = y;
+  state.examDate[id] = '';   // 手動揀年份 → 取消日子反查
+  renderStats();
+}
+function toggleExamOther(id, on) {
+  state.examOther[id] = on;
+  if (on) { state.examDate[id] = ''; state.examYear[id] = ''; }
+  renderStats();
+}
+/** 填咗升段日子 → 上面兩個下拉自動對應返嗰日嘅審查 */
+function pickPromoDate(id, v) {
+  memDraft(id).promoDate = v;
+  state.examDate[id] = v || '';
+  if (v) {
+    var hit = state.memberList.exams.filter(function (x) { return x.date === v; });
+    if (hit.length === 1) memDraft(id).exam = hit[0].name;   // 當日只有一個審查就自動填
+    state.examYear[id] = (v.match(/^(\d{4})/) || [])[1] || '';
+  }
+  renderStats();
+}
 function pickExam(id, name) {
   var d = memDraft(id);
   d.exam = name;
+  state.examDate[id] = '';   // 由清單揀 → 取消日子反查
   var ex = state.memberList.exams.filter(function (x) { return x.name === name; })[0];
   if (ex && ex.date) d.promoDate = ex.date;   // 揀咗審查自動填返日子，仍然改得
   renderStats();
@@ -2830,11 +2896,17 @@ function submitAddMember() {
   }).catch(function (e) { toast('失敗：' + e.message); });
 }
 
-var memberSearchTimer = null;
-function onMemberSearch(v) {
-  state.memberQ = v;
-  clearTimeout(memberSearchTimer);
-  memberSearchTimer = setTimeout(renderStats, 200);
+/* 搜尋改成撳掣／Enter 先執行 —— 打字期間唔會 render，
+   所以中文輸入法組字唔會俾清單刷新打斷。 */
+function doMemberSearch() {
+  var box = document.getElementById('memQBox');
+  if (box) state.memberQRaw = box.value;
+  state.memberQ = state.memberQRaw || '';
+  renderStats();
+}
+function clearMemberSearch() {
+  state.memberQ = ''; state.memberQRaw = '';
+  renderStats();
 }
 
 /* 動作分色：紅＝要跟進，綠＝完成，藍＝日常 */
