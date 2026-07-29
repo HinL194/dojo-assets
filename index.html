@@ -498,6 +498,24 @@
   .svc-item input{width:auto;margin:0}
   textarea#annBox{width:100%;font-family:inherit;line-height:1.5;resize:vertical}
 
+  /* ---------- 強化警告框 ---------- */
+  .warnbox{
+    background:#FFF4E2;border:1.5px solid var(--shu);
+    border-left-width:5px;border-radius:var(--radius);
+    padding:13px 15px;margin-bottom:12px;
+  }
+  .warnbox-head{
+    font-family:'Noto Serif TC',serif;font-weight:700;font-size:15.5px;
+    color:var(--shu);letter-spacing:.04em;margin-bottom:8px;
+  }
+  .warnbox-hit{
+    background:var(--shu);color:#FFF8EE;
+    font-size:14.5px;font-weight:700;line-height:1.55;
+    padding:9px 12px;border-radius:8px;margin-bottom:9px;
+  }
+  .warnbox-hit u{text-underline-offset:3px}
+  .warnbox-body{font-size:13.5px;line-height:1.65;color:var(--ink)}
+
   /* ---------- 會員名單 ---------- */
   .card.item.mem{flex-wrap:wrap}
   .card.item.mem.off{opacity:.55}
@@ -658,7 +676,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v20';
+var APP_VERSION = 'v22';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -698,6 +716,9 @@ var state = {
   memberShowAll: false, // 連非活躍會員一齊顯示
   addMemberOpen: false,
   examYear: {},         // 每個會員嘅升段審查年份篩選
+  myEquip: null,        // 自己嘅裝備（已儲存版本）
+  myEquipDraft: null,   // 編輯緊嘅版本
+  myEquipDirty: false,
   bowAllStats: false,   // 報告頁弓具：睇全部定係只睇要留意嘅
   svcCardOpen: false,   // 今日工作維修卡開合
   svcBow: null,         // 回報緊邊張弓
@@ -1706,8 +1727,7 @@ function doLogin() {
   }).catch(function (e) { btn.disabled = false; btn.textContent = '登入'; toast('登入失敗：' + e.message); });
 }
 function logout() {
-  state.auth = null; state.ops = null;
-  state.tab = 'today'; state.rotaEdit = false;
+  clearSession_();
   try { localStorage.removeItem('dojoAuth'); } catch (e) {}
   render();
 }
@@ -1724,11 +1744,17 @@ function renderMe() {
     '<p style="font-size:12.5px;color:var(--ink-soft);margin:2px 2px 0">' +
     '姓名、編號、角色由工務組組長喺名單設定，如有錯請搵工務組組長更改。</p>';
 
+  /* ---- 我嘅裝備（自己登記） ---- */
+  h += '<div class="section-label">我嘅裝備</div><div class="card">' + myEquipCard() + '</div>';
+
   h += '<div class="section-label">更改 PIN</div>' +
-    '<div class="notice" style="margin-bottom:10px">' +
-    '<b>⚠ 提醒：</b>PIN 係以明文存放喺道場個 Google Sheet 度，<b>網頁管理員睇得到</b>。' +
-    '請<b>唔好</b>用你銀行、電郵、社交媒體或者任何其他帳戶嘅密碼。' +
-    '揀一組只係用嚟開呢個網頁嘅數字就得。</div>' +
+    '<div class="warnbox">' +
+    '<div class="warnbox-head">⚠ 請認真揀 PIN</div>' +
+    '<div class="warnbox-hit">PIN 係<u>明文</u>存放喺道場個 Google Sheet，<br>' +
+    '所有網頁管理員都睇得到。</div>' +
+    '<div class="warnbox-body">' +
+    '所以<b>千祈唔好</b>用你銀行、電郵、社交媒體或者任何其他帳戶嘅密碼。<br>' +
+    '揀一組淨係用嚟開呢個網頁嘅數字就得。</div></div>' +
     '<div class="card">' +
     '<label>目前 PIN</label><input id="pinOld" type="password" inputmode="numeric" autocomplete="current-password">' +
     '<label>新 PIN（4 至 8 個數字）</label><input id="pinNew" type="password" inputmode="numeric" autocomplete="new-password">' +
@@ -1746,6 +1772,101 @@ function renderMe() {
     if (e.key === 'Enter') doChangePin();
   });
 }
+/* ---------- 我嘅裝備 ---------- */
+function myEquipCard() {
+  var e = state.myEquip;
+  if (!e) {
+    call('getMyEquipment', authPayload()).then(function (d) {
+      state.myEquip = d;
+      state.myEquipDraft = {
+        bows: d.bows.map(function (b) { return { color: b.color, mei: b.mei, kg: b.kg }; }),
+        quivers: d.quivers.slice()
+      };
+      if (state.tab === 'me') renderMe();
+    }).catch(function (err) { toast('裝備載入失敗：' + err.message); });
+    return '<div class="loading">載入中</div>';
+  }
+
+  var d = state.myEquipDraft;
+  var h = '<div class="rota-no">自有弓（最多 3 張）</div>';
+  [0, 1, 2].forEach(function (i) {
+    var b = d.bows[i] || {};
+    h += '<div class="edit-row" style="margin-bottom:6px">' +
+      '<input style="flex:1" placeholder="顏色" value="' + esc(b.color || '') + '" ' +
+      'onchange="editMyBow(' + i + ',\'color\',this.value)">' +
+      '<input style="flex:1.3" placeholder="銘" value="' + esc(b.mei || '') + '" ' +
+      'onchange="editMyBow(' + i + ',\'mei\',this.value)">' +
+      '<input style="flex:0 0 62px" type="number" inputmode="decimal" placeholder="kg" ' +
+      'value="' + esc(b.kg || '') + '" onchange="editMyBow(' + i + ',\'kg\',this.value)">' +
+      '</div>';
+  });
+
+  h += '<div class="rota-no" style="margin-top:12px">箭筒（最多 3 個）</div><div class="edit-row">';
+  [0, 1, 2].forEach(function (i) {
+    h += '<input style="flex:1" placeholder="顏色" value="' + esc(d.quivers[i] || '') + '" ' +
+      'onchange="editMyQuiver(' + i + ',this.value)">';
+  });
+  h += '</div>';
+
+  if (state.myEquipDirty) {
+    h += '<div style="margin-top:14px"><button class="primary" onclick="saveMyEquip()">儲存裝備</button></div>';
+  }
+  return h;
+}
+function editMyBow(i, field, v) {
+  state.myEquipDraft.bows[i][field] = v;
+  state.myEquipDirty = true;
+  renderMe();
+}
+function editMyQuiver(i, v) {
+  state.myEquipDraft.quivers[i] = v;
+  state.myEquipDirty = true;
+  renderMe();
+}
+function saveMyEquip() {
+  var d = state.myEquipDraft;
+  toast('儲存中…');
+  call('saveMyEquipment', authPayload(), d.bows, d.quivers).then(function (r) {
+    if (!r.ok) return toast(r.msg);
+    toast('已儲存裝備');
+    state.myEquipDirty = false;
+    state.myEquip = { bows: d.bows, quivers: d.quivers };
+    state.memberList = null;   // 報告頁嘅名單要重新攞
+    renderMe();
+  }).catch(function (e) { toast('失敗：' + e.message); });
+}
+
+/**
+ * 登出／換人時清走所有同帳戶有關嘅資料同未儲存草稿。
+ * 最緊要係 pending（點算物資草稿）—— 唔清嘅話上一個人未儲存嘅數
+ * 會俾下一個登入嘅人用自己名義提交。
+ */
+function clearSession_() {
+  state.auth = null;
+  state.tab = 'today';
+
+  // 由後台攞返嚟嘅資料
+  state.ops = null; state.bow = null; state.memberList = null;
+  state.myEquip = null; state.myEquipDraft = null; state.myEquipDirty = false;
+
+  // 未儲存草稿
+  state.pending = {}; state.memberEdits = {}; state.itemEdit = null;
+  state.catOrderDraft = null; state.reasonDraft = null; state.builder = null;
+  state.svcSel = {}; state.svcBow = null; state.svcFrom = null;
+  state.rotaEditingId = null; state.rotaEdit = false;
+
+  // 介面開合／篩選
+  state.dutyOpen = null; state.repairFormOpen = false; state.buyOpen = false;
+  state.recentAll = false; state.routineOpen = false; state.catOrderOpen = false;
+  state.stockQ = ''; state.stockFilter = 'all'; state.stockCat = '';
+  state.rotaOpen = false; state.bowType = ''; state.bowKg = ''; state.bowQ = '';
+  state.bowPick = null; state.bowGuest = false; state.bowEdit = null;
+  state.reasonOpen = false; state.bowAllStats = false; state.svcCardOpen = false;
+  state.memberOpen = false; state.memberQ = ''; state.memberOpenId = null;
+  state.memberShowAll = false; state.addMemberOpen = false; state.examYear = {};
+  state.annText = null;
+}
+
 function backFromMe() { state.tab = 'today'; render(); }
 
 function doChangePin() {
@@ -2549,9 +2670,9 @@ function memberListPanel() {
       (cur.promoDate ? ' · ' + esc(cur.promoDate) : '') +
       ' · 弓 ' + cur.bows.filter(function (b) { return b.color || b.mei || b.kg; }).length +
       '／箭筒 ' + cur.quivers.filter(function (x) { return x; }).length + '</div></div>' +
-      '<span class="caret' + (open ? ' up' : '') + '" onclick="toggleMemberRow(\'' + esc(m.id) + '\')">⌄</span>' +
-      '</div>';
+      '<span class="caret' + (open ? ' up' : '') + '" onclick="toggleMemberRow(\'' + esc(m.id) + '\')">⌄</span>';
     if (open) h += memberEditor(m, cur, d);
+    h += '</div>';
   });
 
   if (dirty) {
