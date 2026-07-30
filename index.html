@@ -502,6 +502,37 @@
   .svc-item input{width:auto;margin:0}
   textarea#annBox{width:100%;font-family:inherit;line-height:1.5;resize:vertical}
 
+  .langbtn{
+    font-size:11.5px;letter-spacing:.06em;padding:4px 8px;
+    min-width:32px;opacity:.85;
+  }
+
+  .act-count{
+    font-size:11.5px;color:var(--ai);font-weight:700;
+    letter-spacing:.05em;margin-bottom:2px;
+  }
+  .promo-row{
+    display:flex;align-items:center;gap:8px;
+    padding:4px 2px;border-bottom:1px solid var(--line);
+  }
+  .promo-row:last-of-type{border-bottom:none}
+  .promo-row.on{background:rgba(27,52,80,.05);border-radius:8px;padding-left:6px}
+  .promo-row .svc-item{margin:0}
+
+  /* ---------- 回到最頂 ---------- */
+  #toTop{
+    position:fixed;right:14px;z-index:30;
+    bottom:calc(var(--nav-h) + 14px);
+    width:42px;height:42px;border-radius:50%;
+    background:var(--card);color:var(--ai);
+    border:1px solid var(--line);box-shadow:0 3px 12px rgba(42,39,34,.16);
+    font-size:17px;line-height:1;cursor:pointer;
+    display:none;align-items:center;justify-content:center;
+    padding:0;
+  }
+  body.nav-hidden #toTop{bottom:calc(var(--safe-b) + 14px)}
+  #toTop.show{display:flex}
+
   /* ---------- 強化警告框 ---------- */
   .warnbox{
     background:#FFF4E2;border:1.5px solid var(--shu);
@@ -669,18 +700,19 @@
       <span class="cloud" aria-hidden="true"><svg viewBox="0 0 74 28" xmlns="http://www.w3.org/2000/svg"><g fill="currentColor"><ellipse cx="25" cy="12" rx="14" ry="9"/><ellipse cx="11" cy="18.5" rx="9" ry="5.8"/><ellipse cx="41" cy="15" rx="10.5" ry="6.8"/><ellipse cx="54" cy="18.5" rx="8" ry="4.8"/><ellipse cx="64" cy="20.5" rx="5.5" ry="3.2"/><rect x="7" y="16" width="60" height="8" rx="4"/></g></svg></span>
     </span>
   </div>
-  <h1>道場工務系統</h1>
+  <h1 id="appName">道場工務系統</h1>
   <div class="hdr-user" id="hdrUser"></div>
 </header>
 
 <main id="main"><div class="loading">載入中</div></main>
 
 <nav id="nav"></nav>
+<button id="toTop" title="回到最頂" aria-label="回到最頂">↑</button>
 
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v24';
+var APP_VERSION = 'v26';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -714,15 +746,20 @@ var state = {
   reasonDraft: null,
   memberList: null,     // 會員名單資料
   memberOpen: false,    // 報告頁嘅會員名單展開咗未
+  lang: 'zh',           // 介面語言：zh / en
   memberQ: '',          // 會員名單搜尋（已套用）
   memberQRaw: '',       // 輸入框入面打緊嘅字（未撳搜尋）
   examOther: {},        // 邊個會員剔咗「其他（自行輸入）」
-  examDate: {},         // 用日子反查嗰陣，篩選審查清單用
+  promoteOpen: false,   // 登記升段結果面板
+  promoMode: 'dan',     // 'dan' 段位審查 / 'kyu' 館內試
+  promoExam: '',        // 揀咗邊個場次
+  promoDate: '',        // 館內試日期
+  promoPick: {},        // { 會員編號: { grade } }
+  newExamOpen: false,
   memberEdits: {},      // 改咗但未儲存嘅會員資料
   memberOpenId: null,   // 展開緊邊個會員
   memberShowAll: false, // 連非活躍會員一齊顯示
   addMemberOpen: false,
-  examYear: {},         // 每個會員嘅升段審查年份篩選
   myEquip: null,        // 自己嘅裝備（已儲存版本）
   myEquipDraft: null,   // 編輯緊嘅版本
   myEquipDirty: false,
@@ -789,6 +826,145 @@ function toast(msg) {
   clearTimeout(t._h);
   t._h = setTimeout(function () { t.classList.remove('show'); }, 2600);
 }
+
+/* ============ 雙語（會員頁面） ============
+ * 只覆蓋會員／訪客會見到嘅頁面：登入、今日工作、公家弓、我的資料。
+ * 物資／報告係工務組專用，維持中文。
+ */
+var I18N = {
+  zh: {
+    appTitle: '道場工務系統',
+    login: '登入', logout: '登出', back: '← 返回',
+    tabToday: '今日工作', tabBow: '公家弓', tabStock: '物資', tabReport: '報告',
+    loading: '載入中', retry: '重試', cancel: '取消', submit: '提交', save: '儲存',
+    loadFail: '載入失敗：',
+
+    /* 登入 */
+    memberNo: '會員編號', pin: 'PIN',
+    loginHint: '登入後可以睇點名連結同完整每月工作表，亦可以回報「今日未能完成」嘅工作。工務組仲可以點算物資、報維修。',
+    pinTipTitle: '未改過 PIN？',
+    pinTipBody: '預設 PIN 係你嘅會員編號補足 <b>4 位數字</b>。<br>例：會員編號 <b>123</b> → PIN 係 <b>0123</b><br>登入後請撳頁首自己個名，改一個只用喺呢個網頁嘅 PIN。',
+    backToday: '← 返回今日工作',
+    needIdPin: '請輸入會員編號同 PIN',
+    loggingIn: '登入中…', pinPlaceholder: '你嘅 PIN',
+
+    /* 今日工作 */
+    rollCall: '點名', reportRepair: '🔧 報維修',
+    todayPrefix: '今日 · ', noDuty: '今日冇編排工作 ○',
+    fullRota: '查看完整每月工作表',
+    todayLoginHint: '登入後可以睇點名連結、完整每月工作表，同埋回報今日未能完成嘅工作。',
+    itemPos: '器具／位置', problemDesc: '問題描述',
+    fillBoth: '請填齊器具同問題描述', repairDone: '已報告維修',
+    cantFinish: '未能完成', undoReport: '取消回報',
+
+    /* 保養卡 */
+    bowCheck: '🏹 公家弓檢查維修',
+    svcResult: '檢查結果（可多選）',
+    svcOther: '其他（自由填寫）', svcNote: '備註（選填）',
+    svcHint: '撳弓號登記已保養／檢查結果',
+    pickResult: '請揀檢查結果', svcSaved: '已記錄保養',
+    svcAllDone: '已記錄，本月檢查全部完成 ✓',
+
+    /* 公家弓 */
+    searchBow: '搜尋編號、品牌…', allTypes: '全部', allKg: '全部弓力',
+    noBowFound: '搵唔到符合嘅弓',
+    loanReason: '借用原因', forGuest: '代訪客／其他人登記',
+    guestName: '借用人姓名', confirmBorrow: '確認借用',
+    needGuestName: '請填借用人姓名', borrowing: '登記中…',
+    borrowed: '已登記借用 ', bowUnavailable: '，借唔到',
+    totalLoans: '累計借出 ', times: ' 次',
+    nextCheck: ' · 距下次檢查 ', due: '已到',
+    lastService: '上次保養：', needCheck: '待檢查',
+
+    /* 我的資料 */
+    myData: '我的資料', name: '姓名', role: '角色',
+    myGear: '我嘅裝備', ownBows: '自有弓（最多 3 張）', quivers: '箭筒（最多 3 個）',
+    color: '顏色', mei: '銘', saveGear: '儲存裝備', gearSaved: '已儲存裝備',
+    changePin: '更改 PIN', currentPin: '目前 PIN',
+    newPin: '新 PIN（4 至 8 個數字）', newPin2: '再輸入新 PIN',
+    fillThree: '請填齊三格', pinMismatch: '兩次輸入嘅新 PIN 唔一樣',
+    pinFormat: '新 PIN 要 4 至 8 個數字', changing: '更改中…',
+    profileNote: '姓名、編號、角色由工務組組長喺名單設定，如有錯請搵工務組組長更改。',
+    warnHead: '⚠ 請小心改 PIN',
+    warnHit: 'PIN 係<u>明文</u>存放喺道場個 Google Sheet，<br>所有網頁管理員都睇得到。',
+    warnBody: '所以<b>千祈唔好</b>用你銀行、電郵、社交媒體或者任何其他帳戶嘅密碼。<br>揀一組淨係用嚟開呢個網頁嘅數字就得。',
+    fail: '失敗：'
+  },
+  en: {
+    appTitle: 'Dojo Operations',
+    login: 'Log in', logout: 'Log out', back: '← Back',
+    tabToday: 'Today', tabBow: 'Dojo Bows', tabStock: 'Supplies', tabReport: 'Reports',
+    loading: 'Loading', retry: 'Retry', cancel: 'Cancel', submit: 'Submit', save: 'Save',
+    loadFail: 'Failed to load: ',
+
+    memberNo: 'Member No.', pin: 'PIN',
+    loginHint: 'Log in to see the roll-call link and the full monthly rota, and to report duties you could not complete. Operations members can also count supplies and report repairs.',
+    pinTipTitle: 'Never changed your PIN?',
+    pinTipBody: 'Your default PIN is your member number padded to <b>4 digits</b>.<br>e.g. member no. <b>123</b> → PIN <b>0123</b><br>After logging in, tap your name in the header to set a PIN used only for this site.',
+    backToday: '← Back to Today',
+    needIdPin: 'Please enter your member number and PIN',
+    loggingIn: 'Logging in…', pinPlaceholder: 'Your PIN',
+
+    rollCall: 'Roll Call', reportRepair: '🔧 Report Repair',
+    todayPrefix: 'Today · ', noDuty: 'No duties scheduled today ○',
+    fullRota: 'View full monthly rota',
+    todayLoginHint: 'Log in to see the roll-call link, the full monthly rota, and to report duties you could not complete today.',
+    itemPos: 'Item / Location', problemDesc: 'Description of problem',
+    fillBoth: 'Please fill in both fields', repairDone: 'Repair reported',
+    cantFinish: 'Could not complete', undoReport: 'Undo report',
+
+    bowCheck: '🏹 Dojo Bow Inspection',
+    svcResult: 'Inspection result (multiple choice)',
+    svcOther: 'Other (free text)', svcNote: 'Notes (optional)',
+    svcHint: 'Tap a bow number to log its inspection result',
+    pickResult: 'Please select a result', svcSaved: 'Inspection logged',
+    svcAllDone: 'Logged — all bows inspected this month ✓',
+
+    searchBow: 'Search number, brand…', allTypes: 'All', allKg: 'All weights',
+    noBowFound: 'No matching bows',
+    loanReason: 'Reason for borrowing', forGuest: 'Register for a guest / someone else',
+    guestName: "Borrower's name", confirmBorrow: 'Confirm',
+    needGuestName: "Please enter the borrower's name", borrowing: 'Registering…',
+    borrowed: 'Borrowed ', bowUnavailable: ' — not available',
+    totalLoans: 'Borrowed ', times: ' times',
+    nextCheck: ' · next check in ', due: 'due now',
+    lastService: 'Last serviced: ', needCheck: 'due',
+
+    myData: 'My Profile', name: 'Name', role: 'Role',
+    myGear: 'My Equipment', ownBows: 'My bows (up to 3)', quivers: 'Quivers (up to 3)',
+    color: 'Colour', mei: 'Mei', saveGear: 'Save equipment', gearSaved: 'Equipment saved',
+    changePin: 'Change PIN', currentPin: 'Current PIN',
+    newPin: 'New PIN (4–8 digits)', newPin2: 'Confirm new PIN',
+    fillThree: 'Please fill in all three fields', pinMismatch: 'The two new PINs do not match',
+    pinFormat: 'PIN must be 4–8 digits', changing: 'Changing…',
+    profileNote: 'Name, member number and role are set by the operations lead. Contact them if anything is wrong.',
+    warnHead: '⚠ Choose your PIN carefully',
+    warnHit: 'Your PIN is stored as <u>plain text</u> in the dojo Google Sheet,<br>visible to every site administrator.',
+    warnBody: 'So <b>never</b> reuse a password from your bank, email, social media or any other account.<br>Pick a number you use only for this site.',
+    fail: 'Failed: '
+  }
+};
+
+function t(k) {
+  var d = I18N[state.lang] || I18N.zh;
+  return d[k] != null ? d[k] : (I18N.zh[k] != null ? I18N.zh[k] : k);
+}
+
+function setLang(l) {
+  state.lang = (l === 'en') ? 'en' : 'zh';
+  try { localStorage.setItem('dojoLang', state.lang); } catch (e) {}
+  applyLangChrome();
+  render();
+}
+
+/** 更新 <title>、<html lang>：iOS「加至主畫面」會攞當時嘅 title 做圖示名 */
+function applyLangChrome() {
+  document.title = t('appTitle');
+  var el = document.getElementById('appName');
+  if (el) el.textContent = t('appTitle');
+  try { document.documentElement.setAttribute('lang', state.lang === 'en' ? 'en' : 'zh-Hant'); } catch (e) {}
+}
+
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
@@ -889,16 +1065,16 @@ function dimHeader() {
 
 /* ============ 導覽 ============ */
 var TABS_IN = [
-  ['today', '今日工作', 'member'],
-  ['bow',   '公家弓',   'member'],
-  ['stock', '物資',     'ops'],
-  ['stats', '報告',     'report']   // 含導師
+  ['today', 'tabToday',  'member'],
+  ['bow',   'tabBow',    'member'],
+  ['stock', 'tabStock',  'ops'],
+  ['stats', 'tabReport', 'report']   // 含導師
 ];
 function visibleTabs() {
-  return TABS_IN.filter(function (t) {
-    if (t[2] === 'member') return true;
-    if (t[2] === 'ops')    return isOps();
-    if (t[2] === 'report') return isReport();
+  return TABS_IN.filter(function (tb) {
+    if (tb[2] === 'member') return true;
+    if (tb[2] === 'ops')    return isOps();
+    if (tb[2] === 'report') return isReport();
     return false;
   });
 }
@@ -919,17 +1095,27 @@ function renderNav() {
   document.body.classList.remove('nav-hidden');
   var tabs = visibleTabs();
   // 'me' 冇底部掣，但係合法頁面
-  var valid = tabs.some(function (t) { return t[0] === state.tab; }) || state.tab === 'me';
+  var valid = tabs.some(function (tb) { return tb[0] === state.tab; }) || state.tab === 'me';
   if (!valid) state.tab = 'today';
-  nav.innerHTML = tabs.map(function (t) {
-    return '<button data-tab="' + t[0] + '"' + (t[0] === state.tab ? ' class="active"' : '') + '>' + t[1] + '</button>';
+  nav.innerHTML = tabs.map(function (tb) {
+    return '<button data-tab="' + tb[0] + '"' + (tb[0] === state.tab ? ' class="active"' : '') +
+      '>' + esc(t(tb[1])) + '</button>';
   }).join('');
   document.querySelectorAll('#nav button').forEach(function (b) {
     b.addEventListener('click', function () { state.tab = b.dataset.tab; render(); });
   });
 }
 
+var _lastTab = null;
 function render() {
+  // 換頁就捲返最頂（唔係換頁就唔郁，避免打斷編輯）
+  if (state.tab !== _lastTab) {
+    _lastTab = state.tab;
+    var mb = document.getElementById('main');
+    if (mb) mb.scrollTop = 0;
+    var tt = document.getElementById('toTop');
+    if (tt) tt.classList.remove('show');
+  }
   if (state.tab !== 'stock') document.body.classList.remove('has-savebar');
   renderNav();
   renderMoon();
@@ -950,17 +1136,25 @@ function render() {
 }
 
 /* 頁首右邊：未登入 → 登入掣；已登入 → 姓名 (會員編號) + 登出 */
+function langBtn() {
+  var other = state.lang === 'en' ? 'zh' : 'en';
+  return '<button class="langbtn" onclick="setLang(\'' + other + '\')" ' +
+    'title="' + (other === 'en' ? 'English' : '中文') + '">' +
+    (other === 'en' ? 'EN' : '中') + '</button>';
+}
+
 function renderHdrUser() {
   var box = document.getElementById('hdrUser');
   if (!state.auth) {
-    box.innerHTML = (state.tab === 'login')
-      ? '<button onclick="closeLogin()">返回</button>'
-      : '<button onclick="openLogin()">登入</button>';
+    box.innerHTML = langBtn() + ((state.tab === 'login')
+      ? '<button onclick="closeLogin()">' + t('back').replace('← ', '') + '</button>'
+      : '<button onclick="openLogin()">' + t('login') + '</button>');
     return;
   }
-  box.innerHTML = '<span class="nm" onclick="openMe()">' + esc(state.auth.name) +
+  box.innerHTML = langBtn() +
+    '<span class="nm" onclick="openMe()">' + esc(state.auth.name) +
     ' <span class="uid">(' + esc(state.auth.id) + ')</span></span>' +
-    '<button onclick="logout()">登出</button>';
+    '<button onclick="logout()">' + t('logout') + '</button>';
 }
 function openMe() { state.tab = 'me'; render(); }
 function openLogin() { state.tab = 'login'; render(); }
@@ -987,7 +1181,7 @@ function renderToday() {
   var st = d.settings || {};
   if (state.auth && st.rollCallUrl) {
     h += '<a class="rollcall" href="' + esc(st.rollCallUrl) + '" target="_blank" rel="noopener">' +
-      esc(st.rollCallLabel || '點名') + ' ↗</a>';
+      esc(st.rollCallLabel || t('rollCall')) + ' ↗</a>';
   } else if (isLeader()) {
     h += '<div class="empty" style="margin-bottom:10px;padding:14px">' +
       '未設定點名連結<br><button class="ghost" style="margin-top:8px" onclick="openSettings()">去設定</button></div>';
@@ -995,7 +1189,7 @@ function renderToday() {
 
   /* 報維修（組員以上） */
   if (isReport()) {
-    h += '<button class="repairbtn" onclick="toggleRepairForm()">🔧 報維修' +
+    h += '<button class="repairbtn" onclick="toggleRepairForm()">' + t('reportRepair') +
       (state.repairFormOpen ? ' ✕' : '') + '</button>';
     if (state.repairFormOpen) h += repairFormCard();
   }
@@ -1008,7 +1202,7 @@ function renderToday() {
     var open = state.svcCardOpen;
     h += '<div class="card duty svc-card' + (open ? ' open' : '') + '">' +
       '<div class="duty-head" onclick="toggleSvcCard()">' +
-      '<span class="duty-name">🏹 公家弓檢查維修</span>' +
+      '<span class="duty-name">' + t('bowCheck') + '</span>' +
       '<span class="svc-prog">' + done + '/' + total + '</span>' +
       '<span class="caret' + (open ? ' up' : '') + '">⌄</span></div>';
     if (open) {
@@ -1027,26 +1221,25 @@ function renderToday() {
         h += '</div>';
       });
       if (state.svcBow) h += svcForm(state.svcBow);
-      h += '<p class="svc-hint">撳弓號登記已保養／檢查結果</p></div>';
+      h += '<p class="svc-hint">' + t('svcHint') + '</p></div>';
     }
     h += '</div>';
   }
 
-  h += '<div class="section-label">今日 · ' + esc(d.todayName) + '</div>';
+  h += '<div class="section-label">' + t('todayPrefix') + esc(d.todayName) + '</div>';
 
   if (!d.todayDuties.length) {
-    h += '<div class="empty">今日冇編排工作 ○</div>';
+    h += '<div class="empty">' + t('noDuty') + '</div>';
   } else {
     d.todayDuties.forEach(function (r, i) { h += dutyCard(r, i); });
   }
 
   if (state.auth) {
     h += '<details id="rotaDetails"' + (state.rotaOpen ? ' open' : '') + ' style="margin-top:14px">' +
-      '<summary>查看完整每月工作表</summary><div id="rotaBody"></div></details>';
+      '<summary>' + t('fullRota') + '</summary><div id="rotaBody"></div></details>';
   } else {
-    h += '<div class="login-hint">登入後可以睇點名連結、完整每月工作表，' +
-      '同埋回報今日未能完成嘅工作。<br>' +
-      '<button class="ghost" style="margin-top:9px" onclick="openLogin()">登入</button></div>';
+    h += '<div class="login-hint">' + t('todayLoginHint') + '<br>' +
+      '<button class="ghost" style="margin-top:9px" onclick="openLogin()">' + t('login') + '</button></div>';
   }
   h += '<div class="ver">' + APP_VERSION + '</div>';
   main().innerHTML = h;
@@ -1122,28 +1315,28 @@ function svcForm(bowId) {
   var items = (state.publicData && state.publicData.serviceItems) ||
     ['不需要維修', '日輪', '中仕掛', '月輪', '更換新弦', '更換擋皮', '維修或更換弓袋'];
   var h = '<div class="svc-form" onclick="event.stopPropagation()">' +
-    '<div class="rota-no">檢查結果（可多選）</div>';
+    '<div class="rota-no">' + t('svcResult') + '</div>';
   items.forEach(function (it) {
     var on = !!state.svcSel[it];
     h += '<label class="svc-item"><input type="checkbox"' + (on ? ' checked' : '') +
       ' onchange="svcToggle(\'' + it + '\',this.checked)"><span>' + esc(it) + '</span></label>';
   });
-  h += '<label style="margin-top:8px">其他（自由填寫）</label><input id="svcOther">' +
-    '<label>備註（選填）</label><input id="svcNote">' +
+  h += '<label style="margin-top:8px">' + t('svcOther') + '</label><input id="svcOther">' +
+    '<label>' + t('svcNote') + '</label><input id="svcNote">' +
     '<div class="edit-row" style="margin-top:12px">' +
-    '<button class="primary" onclick="submitSvc(\'' + esc(bowId) + '\')">提交</button>' +
-    '<button class="ghost" onclick="openSvc(\'' + esc(bowId) + '\',\'' + (state.svcFrom || 'stats') + '\')">取消</button>' +
+    '<button class="primary" onclick="submitSvc(\'' + esc(bowId) + '\')">' + t('submit') + '</button>' +
+    '<button class="ghost" onclick="openSvc(\'' + esc(bowId) + '\',\'' + (state.svcFrom || 'stats') + '\')">' + t('cancel') + '</button>' +
     '</div></div>';
   return h;
 }
 function submitSvc(bowId) {
   var items = Object.keys(state.svcSel || {});
   var other = val('svcOther'), note = val('svcNote');
-  if (!items.length && !other) return toast('請揀檢查結果');
+  if (!items.length && !other) return toast(t('pickResult'));
   toast('提交中…');
   call('serviceBow', authPayload(), bowId, items, note, other).then(function (r) {
     if (!r.ok) return toast(r.msg);
-    toast(r.monthComplete ? '已記錄，本月檢查全部完成 ✓' : '已記錄保養');
+    toast(r.monthComplete ? t('svcAllDone') : t('svcSaved'));
     state.svcBow = null; state.svcSel = {};
     state.publicData = null; state.ops = null; state.bow = null;
     render();
@@ -1158,17 +1351,17 @@ function toggleRepairForm() {
 }
 function repairFormCard() {
   return '<div class="card repair-form">' +
-    '<label>器具／位置</label><input id="rItem" placeholder="例：3號巻藁 / 冷氣隔塵網">' +
-    '<label>問題描述</label><textarea id="rDesc" rows="2"></textarea>' +
-    '<div style="margin-top:12px"><button class="primary" onclick="submitRepairToday()">提交</button></div>' +
+    '<label>' + t('itemPos') + '</label><input id="rItem" placeholder="例：3號巻藁 / 冷氣隔塵網">' +
+    '<label>' + t('problemDesc') + '</label><textarea id="rDesc" rows="2"></textarea>' +
+    '<div style="margin-top:12px"><button class="primary" onclick="submitRepairToday()">' + t('submit') + '</button></div>' +
     '</div>';
 }
 function submitRepairToday() {
   var item = val('rItem'), desc = val('rDesc');
-  if (!item || !desc) return toast('請填齊器具同問題描述');
+  if (!item || !desc) return toast(t('fillBoth'));
   toast('提交中…');
   call('reportRepair', authPayload(), { item: item, desc: desc }).then(function () {
-    toast('已報告維修');
+    toast(t('repairDone'));
     state.repairFormOpen = false;
     if (state.ops) state.ops = null;   // 有舊嘅工務資料就清埋，等報告頁下次載入見到新紀錄
     renderToday();
@@ -1704,35 +1897,32 @@ function delOneoff(id) {
 /* ============ 登入 ============ */
 function renderLogin() {
   main().innerHTML =
-    '<div class="section-label">登入</div>' +
+    '<div class="section-label">' + t('login') + '</div>' +
     '<div class="card">' +
-    '<label>會員編號</label><input id="loginId" autocomplete="username">' +
-    '<label>PIN</label><input id="loginPin" type="password" autocomplete="current-password" inputmode="numeric">' +
-    '<div style="margin-top:14px"><button class="primary" id="loginBtn">登入</button></div>' +
-    '<p style="font-size:12.5px;color:var(--ink-soft);margin-top:10px">' +
-    '登入後可以睇點名連結同完整每月工作表，亦可以回報「今日未能完成」嘅工作。' +
-    '工務組仲可以點算物資、報維修。</p>' +
-    '<div class="pin-tip"><b>未改過 PIN？</b>預設 PIN 係你嘅會員編號補足 <b>4 位數字</b>。' +
-    '<br>例：會員編號 <b>123</b> → PIN 係 <b>0123</b>' +
-    '<br>登入後請撳頁首自己個名，改一個只用喺呢個網頁嘅 PIN。</div>' +
+    '<label>' + t('memberNo') + '</label><input id="loginId" autocomplete="username">' +
+    '<label>' + t('pin') + '</label><input id="loginPin" type="password" autocomplete="current-password" inputmode="numeric">' +
+    '<div style="margin-top:14px"><button class="primary" id="loginBtn">' + t('login') + '</button></div>' +
+    '<p style="font-size:12.5px;color:var(--ink-soft);margin-top:10px">' + t('loginHint') + '</p>' +
+    '<div class="pin-tip"><b>' + t('pinTipTitle') + '</b>' + t('pinTipBody') + '</div>' +
     '</div>' +
-    '<div style="margin-top:12px"><button class="ghost" style="width:100%" onclick="closeLogin()">← 返回今日工作</button></div>';
+    '<div style="margin-top:12px"><button class="ghost" style="width:100%" onclick="closeLogin()">' +
+    t('backToday') + '</button></div>';
   document.getElementById('loginBtn').addEventListener('click', doLogin);
   document.getElementById('loginPin').addEventListener('keydown', function (e) { if (e.key === 'Enter') doLogin(); });
 }
 function doLogin() {
   var id = val('loginId'), pin = val('loginPin');
-  if (!id || !pin) return toast('請輸入會員編號同 PIN');
+  if (!id || !pin) return toast(t('needIdPin'));
   var btn = document.getElementById('loginBtn');
-  btn.disabled = true; btn.textContent = '登入中…';
+  btn.disabled = true; btn.textContent = t('loggingIn');
   call('login', id, pin).then(function (r) {
-    if (!r.ok) { btn.disabled = false; btn.textContent = '登入'; return toast(r.msg); }
+    if (!r.ok) { btn.disabled = false; btn.textContent = t('login'); return toast(r.msg); }
     state.auth = { id: r.id || id, pin: pin, name: r.name, role: r.role };
     try { localStorage.setItem('dojoAuth', JSON.stringify(state.auth)); } catch (e) {}
     toast('歡迎，' + r.name);
     state.tab = 'today';
     render();
-  }).catch(function (e) { btn.disabled = false; btn.textContent = '登入'; toast('登入失敗：' + e.message); });
+  }).catch(function (e) { btn.disabled = false; btn.textContent = t('login'); toast('登入失敗：' + e.message); });
 }
 function logout() {
   clearSession_();
@@ -1743,36 +1933,33 @@ function logout() {
 /* ============ 我的資料 ============ */
 function renderMe() {
   var a = state.auth;
-  var h = '<div class="section-label">我的資料</div><div class="card">' +
-    '<div class="kv"><span class="k">姓名</span><span class="v">' + esc(a.name) + '</span></div>' +
-    '<div class="kv"><span class="k">會員編號</span><span class="v">' + esc(a.id) + '</span></div>' +
+  var h = '<div class="section-label">' + t('myData') + '</div><div class="card">' +
+    '<div class="kv"><span class="k">' + t('name') + '</span><span class="v">' + esc(a.name) + '</span></div>' +
+    '<div class="kv"><span class="k">' + t('memberNo') + '</span><span class="v">' + esc(a.id) + '</span></div>' +
     (['館長', '組長', '副組長', '導師'].indexOf(a.role) > -1
-      ? '<div class="kv"><span class="k">角色</span><span class="v">' + esc(a.role) + '</span></div>' : '') +
+      ? '<div class="kv"><span class="k">' + t('role') + '</span><span class="v">' + esc(a.role) + '</span></div>' : '') +
     '</div>' +
     '<p style="font-size:12.5px;color:var(--ink-soft);margin:2px 2px 0">' +
-    '姓名、編號、角色由工務組組長喺名單設定，如有錯請搵工務組組長更改。</p>';
+    t('profileNote') + '</p>';
 
   /* ---- 我嘅裝備（自己登記） ---- */
-  h += '<div class="section-label">我嘅裝備</div><div class="card">' + myEquipCard() + '</div>';
+  h += '<div class="section-label">' + t('myGear') + '</div><div class="card">' + myEquipCard() + '</div>';
 
-  h += '<div class="section-label">更改 PIN</div>' +
+  h += '<div class="section-label">' + t('changePin') + '</div>' +
     '<div class="warnbox">' +
-    '<div class="warnbox-head">⚠ 請小心改 PIN</div>' +
-    '<div class="warnbox-hit">PIN 係<u>明文</u>存放喺道場個 Google Sheet，<br>' +
-    '所有網頁管理員都睇得到。</div>' +
-    '<div class="warnbox-body">' +
-    '所以<b>千祈唔好</b>用你銀行、電郵、社交媒體或者任何其他帳戶嘅密碼。<br>' +
-    '揀一組淨係用嚟開呢個網頁嘅數字就得。</div></div>' +
+    '<div class="warnbox-head">' + t('warnHead') + '</div>' +
+    '<div class="warnbox-hit">' + t('warnHit') + '</div>' +
+    '<div class="warnbox-body">' + t('warnBody') + '</div></div>' +
     '<div class="card">' +
-    '<label>目前 PIN</label><input id="pinOld" type="password" inputmode="numeric" autocomplete="current-password">' +
-    '<label>新 PIN（4 至 8 個數字）</label><input id="pinNew" type="password" inputmode="numeric" autocomplete="new-password">' +
-    '<label>再輸入新 PIN</label><input id="pinNew2" type="password" inputmode="numeric" autocomplete="new-password">' +
-    '<div style="margin-top:14px"><button class="primary" id="pinBtn">更改 PIN</button></div>' +
+    '<label>' + t('currentPin') + '</label><input id="pinOld" type="password" inputmode="numeric" autocomplete="current-password">' +
+    '<label>' + t('newPin') + '</label><input id="pinNew" type="password" inputmode="numeric" autocomplete="new-password">' +
+    '<label>' + t('newPin2') + '</label><input id="pinNew2" type="password" inputmode="numeric" autocomplete="new-password">' +
+    '<div style="margin-top:14px"><button class="primary" id="pinBtn">' + t('changePin') + '</button></div>' +
     '</div>';
 
   h += '<div style="margin-top:16px;display:flex;gap:8px">' +
-    '<button class="ghost" style="flex:1" onclick="backFromMe()">← 返回</button>' +
-    '<button class="danger" style="flex:1" onclick="logout()">登出</button></div>';
+    '<button class="ghost" style="flex:1" onclick="backFromMe()">' + t('back') + '</button>' +
+    '<button class="danger" style="flex:1" onclick="logout()">' + t('logout') + '</button></div>';
 
   main().innerHTML = h;
   document.getElementById('pinBtn').addEventListener('click', doChangePin);
@@ -1796,28 +1983,28 @@ function myEquipCard() {
   }
 
   var d = state.myEquipDraft;
-  var h = '<div class="rota-no">自有弓（最多 3 張）</div>';
+  var h = '<div class="rota-no">' + t('ownBows') + '</div>';
   [0, 1, 2].forEach(function (i) {
     var b = d.bows[i] || {};
     h += '<div class="edit-row" style="margin-bottom:6px">' +
-      '<input style="flex:1" placeholder="顏色" value="' + esc(b.color || '') + '" ' +
+      '<input style="flex:1" placeholder="' + t('color') + '" value="' + esc(b.color || '') + '" ' +
       'onchange="editMyBow(' + i + ',\'color\',this.value)">' +
-      '<input style="flex:1.3" placeholder="銘" value="' + esc(b.mei || '') + '" ' +
+      '<input style="flex:1.3" placeholder="' + t('mei') + '" value="' + esc(b.mei || '') + '" ' +
       'onchange="editMyBow(' + i + ',\'mei\',this.value)">' +
       '<input style="flex:0 0 62px" type="number" inputmode="decimal" placeholder="kg" ' +
       'value="' + esc(b.kg || '') + '" onchange="editMyBow(' + i + ',\'kg\',this.value)">' +
       '</div>';
   });
 
-  h += '<div class="rota-no" style="margin-top:12px">箭筒（最多 3 個）</div><div class="edit-row">';
+  h += '<div class="rota-no" style="margin-top:12px">' + t('quivers') + '</div><div class="edit-row">';
   [0, 1, 2].forEach(function (i) {
-    h += '<input style="flex:1" placeholder="顏色" value="' + esc(d.quivers[i] || '') + '" ' +
+    h += '<input style="flex:1" placeholder="' + t('color') + '" value="' + esc(d.quivers[i] || '') + '" ' +
       'onchange="editMyQuiver(' + i + ',this.value)">';
   });
   h += '</div>';
 
   if (state.myEquipDirty) {
-    h += '<div style="margin-top:14px"><button class="primary" onclick="saveMyEquip()">儲存裝備</button></div>';
+    h += '<div style="margin-top:14px"><button class="primary" onclick="saveMyEquip()">' + t('saveGear') + '</button></div>';
   }
   return h;
 }
@@ -1836,7 +2023,7 @@ function saveMyEquip() {
   toast('儲存中…');
   call('saveMyEquipment', authPayload(), d.bows, d.quivers).then(function (r) {
     if (!r.ok) return toast(r.msg);
-    toast('已儲存裝備');
+    toast(t('gearSaved'));
     state.myEquipDirty = false;
     state.myEquip = { bows: d.bows, quivers: d.quivers };
     state.memberList = null;   // 報告頁嘅名單要重新攞
@@ -1871,8 +2058,8 @@ function clearSession_() {
   state.bowPick = null; state.bowGuest = false; state.bowEdit = null;
   state.reasonOpen = false; state.bowAllStats = false; state.svcCardOpen = false;
   state.memberOpen = false; state.memberQ = ''; state.memberQRaw = '';
-  state.memberOpenId = null; state.examOther = {}; state.examDate = {};
-  state.memberShowAll = false; state.addMemberOpen = false; state.examYear = {};
+  state.memberOpenId = null; state.examOther = {};
+  state.memberShowAll = false; state.addMemberOpen = false;
   state.annText = null;
 }
 
@@ -1880,14 +2067,14 @@ function backFromMe() { state.tab = 'today'; render(); }
 
 function doChangePin() {
   var oldPin = val('pinOld'), p1 = val('pinNew'), p2 = val('pinNew2');
-  if (!oldPin || !p1 || !p2) return toast('請填齊三格');
-  if (p1 !== p2) return toast('兩次輸入嘅新 PIN 唔一樣');
-  if (!/^\d{4,8}$/.test(p1)) return toast('新 PIN 要 4 至 8 個數字');
+  if (!oldPin || !p1 || !p2) return toast(t('fillThree'));
+  if (p1 !== p2) return toast(t('pinMismatch'));
+  if (!/^\d{4,8}$/.test(p1)) return toast(t('pinFormat'));
 
   var btn = document.getElementById('pinBtn');
-  btn.disabled = true; btn.textContent = '更改中…';
+  btn.disabled = true; btn.textContent = t('changing');
   call('changePin', authPayload(), oldPin, p1).then(function (r) {
-    btn.disabled = false; btn.textContent = '更改 PIN';
+    btn.disabled = false; btn.textContent = t('changePin');
     if (!r.ok) return toast(r.msg);
     // 更新本機儲存嘅登入資料，否則跟住嘅操作會失效
     state.auth.pin = p1;
@@ -1896,7 +2083,7 @@ function doChangePin() {
     toast('PIN 已更改');
     renderMe();
   }).catch(function (e) {
-    btn.disabled = false; btn.textContent = '更改 PIN';
+    btn.disabled = false; btn.textContent = t('changePin');
     toast('失敗：' + e.message);
   });
 }
@@ -1905,13 +2092,13 @@ function doChangePin() {
 
 function renderBow() {
   if (!state.bow) {
-    main().innerHTML = '<div class="loading">載入中</div>';
+    main().innerHTML = '<div class="loading">' + t('loading') + '</div>';
     call('getBowData', authPayload()).then(function (d) {
       state.bow = d;
       if (state.tab === 'bow') renderBow();
     }).catch(function (e) {
-      main().innerHTML = '<div class="empty">載入失敗：' + esc(e.message) +
-        '<br><br><button class="ghost" onclick="state.bow=null;renderBow()">重試</button></div>';
+      main().innerHTML = '<div class="empty">' + t('loadFail') + esc(e.message) +
+        '<br><br><button class="ghost" onclick="state.bow=null;renderBow()">' + t('retry') + '</button></div>';
     });
     return;
   }
@@ -1932,14 +2119,14 @@ function renderBow() {
   }
 
   /* 搜尋 + 篩選 */
-  h += '<input id="bowSearch" class="search" type="search" placeholder="搜尋編號、品牌…" ' +
+  h += '<input id="bowSearch" class="search" type="search" placeholder="' + t('searchBow') + '" ' +
     'value="' + esc(state.bowQ || '') + '" oninput="onBowSearch(this.value)">';
 
   h += '<div class="chips">' +
-    '<button class="chip-btn' + (!state.bowType ? ' on' : '') + '" onclick="setBowType(\'\')">全部</button>' +
-    d.types.map(function (t) {
-      return '<button class="chip-btn' + (state.bowType === t ? ' on' : '') +
-        '" onclick="setBowType(\'' + t + '\')">' + esc(t) + '</button>';
+    '<button class="chip-btn' + (!state.bowType ? ' on' : '') + '" onclick="setBowType(\'\')">' + t('allTypes') + '</button>' +
+    d.types.map(function (bt) {
+      return '<button class="chip-btn' + (state.bowType === bt ? ' on' : '') +
+        '" onclick="setBowType(\'' + bt + '\')">' + esc(bt) + '</button>';
     }).join('') + '</div>';
 
   /* 弓力篩選 */
@@ -1947,7 +2134,7 @@ function renderBow() {
   d.bows.forEach(function (b) { if (kgs.indexOf(b.kg) === -1) kgs.push(b.kg); });
   kgs.sort(function (a, b) { return a - b; });
   h += '<div class="chips sub">' +
-    '<button class="chip-btn' + (!state.bowKg ? ' on' : '') + '" onclick="setBowKg(\'\')">全部弓力</button>' +
+    '<button class="chip-btn' + (!state.bowKg ? ' on' : '') + '" onclick="setBowKg(\'\')">' + t('allKg') + '</button>' +
     kgs.map(function (k) {
       return '<button class="chip-btn' + (String(state.bowKg) === String(k) ? ' on' : '') +
         '" onclick="setBowKg(\'' + k + '\')">' + k + 'kg</button>';
@@ -1981,15 +2168,15 @@ function renderBowList() {
   var list = filteredBows();
 
   if (!list.length) {
-    box.innerHTML = '<div class="empty">搵唔到符合嘅弓</div>';
+    box.innerHTML = '<div class="empty">' + t('noBowFound') + '</div>';
     return;
   }
 
   var h = '';
-  d.types.forEach(function (t) {
-    var group = list.filter(function (b) { return b.type === t; });
+  d.types.forEach(function (bt) {
+    var group = list.filter(function (b) { return b.type === bt; });
     if (!group.length) return;
-    h += '<div class="section-label">' + esc(t) + ' <span class="cnt2">' + group.length + '</span></div>';
+    h += '<div class="section-label">' + esc(bt) + ' <span class="cnt2">' + group.length + '</span></div>';
     h += '<div class="bow-grid">';
     group.forEach(function (b) {
       var picked = state.bowPick === b.id;
@@ -2001,7 +2188,7 @@ function renderBowList() {
         '<div class="bow-info"><div class="bow-brand">' + esc(b.brand) + '</div>' +
         '<div class="bow-meta">' + b.kg + 'kg' +
         (b.status !== '正常' ? ' · ' + esc(b.status) : '') +
-        (d.isOps && b.needService ? ' · 待檢查' : '') + '</div></div>' +
+        (d.isOps && b.needService ? ' · ' + t('needCheck') : '') + '</div></div>' +
         '</div>' +
         (picked ? bowPanel(b) : '') +
         '</div>';
@@ -2017,22 +2204,22 @@ function bowPanel(b) {
   var h = '<div class="bow-panel" onclick="event.stopPropagation()">';
 
   if (b.status === '正常') {
-    h += '<label>借用原因</label><select id="bwReason">' +
+    h += '<label>' + t('loanReason') + '</label><select id="bwReason">' +
       d.reasons.map(function (r) { return '<option>' + esc(r) + '</option>'; }).join('') +
       '</select>';
 
     h += '<label style="display:flex;align-items:center;gap:7px;margin-top:10px">' +
       '<input type="checkbox" id="bwGuest" style="width:auto" ' +
       (state.bowGuest ? 'checked' : '') + ' onchange="toggleGuest(this.checked)">' +
-      '<span>代訪客／其他人登記</span></label>';
+      '<span>' + t('forGuest') + '</span></label>';
     if (state.bowGuest) {
-      h += '<input id="bwName" placeholder="借用人姓名">';
+      h += '<input id="bwName" placeholder="' + t('guestName') + '">';
     }
 
     h += '<div style="margin-top:12px"><button class="primary" onclick="doBorrow(\'' +
-      esc(b.id) + '\')">確認借用</button></div>';
+      esc(b.id) + '\')">' + t('confirmBorrow') + '</button></div>';
   } else {
-    h += '<div class="empty" style="padding:12px">呢張弓' + esc(b.status) + '，借唔到</div>';
+    h += '<div class="empty" style="padding:12px">' + esc(b.status) + t('bowUnavailable') + '</div>';
   }
 
   // 保養狀態同操作統一擺喺「報告」頁，呢度唔重複
@@ -2053,8 +2240,8 @@ function bowEditForm(b) {
   var d = state.bow;
   return '<div class="item-editor" onclick="event.stopPropagation()">' +
     '<label>弓種</label><select id="be_type">' +
-    d.types.map(function (t) {
-      return '<option' + (b.type === t ? ' selected' : '') + '>' + esc(t) + '</option>';
+    d.types.map(function (bt) {
+      return '<option' + (b.type === bt ? ' selected' : '') + '>' + esc(bt) + '</option>';
     }).join('') + '</select>' +
     '<label>品牌</label><input id="be_brand" value="' + esc(b.brand) + '">' +
     '<label>弓力 (kg)</label><input id="be_kg" type="number" inputmode="numeric" value="' + b.kg + '">' +
@@ -2139,11 +2326,11 @@ function toggleGuest(on) { state.bowGuest = on; renderBowList(); }
 function doBorrow(id) {
   var reason = document.getElementById('bwReason').value;
   var name = state.bowGuest ? val('bwName') : '';
-  if (state.bowGuest && !name) return toast('請填借用人姓名');
-  toast('登記中…');
+  if (state.bowGuest && !name) return toast(t('needGuestName'));
+  toast(t('borrowing'));
   call('borrowBow', authPayload(), id, reason, name, '').then(function (r) {
     if (!r.ok) return toast(r.msg);
-    toast('已登記借用 ' + r.label + (r.warn ? '｜' + r.warn : ''));
+    toast(t('borrowed') + r.label + (r.warn ? '｜' + r.warn : ''));
     state.bowPick = null; state.bowGuest = false; state.bow = null;
     renderBow();
   }).catch(function (e) { toast('失敗：' + e.message); });
@@ -2629,7 +2816,7 @@ function toggleMemberList() {
   state.memberOpen = !state.memberOpen;
   if (!state.memberOpen) {
     state.memberEdits = {}; state.memberOpenId = null; state.addMemberOpen = false;
-    state.memberQ = ''; state.memberQRaw = ''; state.examOther = {}; state.examDate = {};
+    state.memberQ = ''; state.memberQRaw = ''; state.examOther = {};
   }
   if (state.memberOpen && !state.memberList) {
     call('getMemberList', authPayload()).then(function (d) {
@@ -2710,15 +2897,35 @@ function memberEditor(m, cur, d) {
       return '<option value="' + esc(g) + '"' + (cur.grade === g ? ' selected' : '') + '>' + esc(g) + '</option>';
     }).join('') + '</select>';
 
-  /* 升段審查 */
+  /* 升段：級位係館內試（只填日期），段位要揀場次 */
+  var isDanG = (d.danGrades || []).indexOf(cur.grade) > -1;
   var other = !!state.examOther[m.id];
+
+  if (!isDanG) {
+    /* 級位：唔使審查名 */
+    h += '<label>升段日子（館內試）</label>' +
+      '<input type="date" ' + (ro ? 'disabled' : '') + ' value="' + esc(cur.promoDate || '') + '" ' +
+      'onchange="editMember(\'' + esc(m.id) + '\',\'promoDate\',this.value)">';
+    if (cur.exam) {
+      h += '<p class="svc-hint">舊紀錄仍有審查名「' + esc(cur.exam) + '」，' +
+        '改成級位之後可以撳下面清走。<br>' +
+        '<button class="ghost" style="margin-top:6px" onclick="editMember(\'' + esc(m.id) + '\',\'exam\',\'\')">清走審查名</button></p>';
+    }
+    return h + '</div>';
+  }
+
+  /* 以下係段位 */
   h += '<label class="svc-item" style="margin-top:12px">' +
     '<input type="checkbox"' + (other ? ' checked' : '') + (ro ? ' disabled' : '') +
     ' onchange="toggleExamOther(\'' + esc(m.id) + '\',this.checked)">' +
     '<span>升段審查：其他（自行輸入）</span></label>';
 
+  h += '<label class="svc-item" style="margin-top:12px">' +
+    '<input type="checkbox"' + (other ? ' checked' : '') + (ro ? ' disabled' : '') +
+    ' onchange="toggleExamOther(\'' + esc(m.id) + '\',this.checked)">' +
+    '<span>其他（唔喺清單嘅審查）</span></label>';
+
   if (other) {
-    /* 自行輸入：唔受設定清單限制 */
     h += '<label>審查名稱</label>' +
       '<input ' + (ro ? 'disabled' : '') + ' placeholder="例：2024年度昇段審査" ' +
       'value="' + esc(cur.exam || '') + '" ' +
@@ -2727,41 +2934,29 @@ function memberEditor(m, cur, d) {
       '<input type="date" ' + (ro ? 'disabled' : '') + ' value="' + esc(cur.promoDate || '') + '" ' +
       'onchange="editMember(\'' + esc(m.id) + '\',\'promoDate\',this.value)">';
   } else {
-    /* 由清單揀：年份 → 審查名。填日子亦會反查返上面兩個下拉 */
-    var years = [];
-    d.exams.forEach(function (x) { if (x.year && years.indexOf(x.year) === -1) years.push(x.year); });
-    years.sort().reverse();
+    /* 單一場次下拉：最新排前，日期直接寫喺選項；揀咗自動填日子並鎖住 */
+    var pool = d.exams.filter(function (x) { return x.grades.indexOf(cur.grade) > -1; });
+    var curKey = (d.exams.filter(function (x) {
+      return x.name === cur.exam && x.date === cur.promoDate;
+    })[0] || {}).key || '';
 
-    var byDate = state.examDate[m.id] || '';
-    var selYear = byDate ? (byDate.match(/^(\d{4})/) || [])[1] || '' :
-      (state.examYear[m.id] ||
-       (d.exams.filter(function (x) { return x.name === cur.exam; })[0] || {}).year || '');
-
-    var pool = d.exams.filter(function (x) {
-      if (byDate) return x.date === byDate;          // 填咗日子 → 只列當日嘅審查
-      return !selYear || x.year === selYear;         // 否則按年份
-    });
-
-    h += '<label>升段審查</label><div class="edit-row">' +
-      '<select ' + (ro ? 'disabled' : '') + ' style="flex:0 0 88px" onchange="pickExamYear(\'' + esc(m.id) + '\',this.value)">' +
-      '<option value="">年份</option>' +
-      years.map(function (y) {
-        return '<option value="' + y + '"' + (selYear === y ? ' selected' : '') + '>' + y + '</option>';
-      }).join('') + '</select>' +
-      '<select ' + (ro ? 'disabled' : '') + ' style="flex:1" onchange="pickExam(\'' + esc(m.id) + '\',this.value)">' +
+    h += '<label>升段審查（只列出有開「' + esc(cur.grade) + '」嘅場次）</label>' +
+      '<select ' + (ro ? 'disabled' : '') + ' onchange="pickExamSession(\'' + esc(m.id) + '\',this.value)">' +
       '<option value="">— 未填 —</option>' +
       pool.map(function (x) {
-        return '<option value="' + esc(x.name) + '"' + (cur.exam === x.name ? ' selected' : '') + '>' +
-          esc(x.name) + '</option>';
-      }).join('') + '</select></div>';
+        return '<option value="' + esc(x.key) + '"' + (curKey === x.key ? ' selected' : '') + '>' +
+          esc(x.name) + '（' + esc(dmy_(x.date)) + '）</option>';
+      }).join('') + '</select>';
 
-    if (byDate && !pool.length) {
-      h += '<p class="svc-hint">' + esc(byDate) + ' 冇對應嘅審查，可以剔「其他」自行輸入</p>';
+    if (!pool.length) {
+      h += '<p class="svc-hint">未有開「' + esc(cur.grade) + '」嘅審查場次。' +
+        '可以喺報告頁「登記升段結果」新增，或者剔上面「其他」自行輸入。</p>';
     }
 
     h += '<label>升段日子</label>' +
-      '<input type="date" ' + (ro ? 'disabled' : '') + ' value="' + esc(cur.promoDate || '') + '" ' +
-      'onchange="pickPromoDate(\'' + esc(m.id) + '\',this.value)">';
+      '<input type="date" readonly value="' + esc(cur.promoDate || '') + '" ' +
+      'style="background:var(--paper);color:var(--ink-soft)">' +
+      '<p class="svc-hint">日子由審查場次自動帶出。要自己填就剔「其他」。</p>';
   }
 
   /* 自有弓 */
@@ -2798,6 +2993,163 @@ function memberEditor(m, cur, d) {
   return h + '</div>';
 }
 
+/* ---------- 批量登記升段結果 ---------- */
+function togglePromote() {
+  state.promoteOpen = !state.promoteOpen;
+  if (state.promoteOpen && !state.memberList) {
+    call('getMemberList', authPayload()).then(function (d) {
+      state.memberList = d; renderStats();
+    }).catch(function (e) { toast('載入失敗：' + e.message); });
+  }
+  if (!state.promoteOpen) { state.promoPick = {}; state.newExamOpen = false; }
+  renderStats();
+}
+
+function promotePanel() {
+  var d = state.memberList;
+  if (!d) return '<div class="loading">載入中</div>';
+
+  var isDanMode = state.promoMode !== 'kyu';
+  var h = '<div class="card ordpanel">';
+
+  /* 模式 */
+  h += '<div class="chips" style="margin-bottom:10px">' +
+    '<button class="chip-btn' + (isDanMode ? ' on' : '') + '" onclick="setPromoMode(\'dan\')">段位審查</button>' +
+    '<button class="chip-btn' + (!isDanMode ? ' on' : '') + '" onclick="setPromoMode(\'kyu\')">級位（館內試）</button>' +
+    '</div>';
+
+  var allowed = [];
+  if (isDanMode) {
+    h += '<label>審查場次</label>' +
+      '<select onchange="setPromoExam(this.value)">' +
+      '<option value="">— 請揀 —</option>' +
+      d.exams.map(function (x) {
+        return '<option value="' + esc(x.key) + '"' + (state.promoExam === x.key ? ' selected' : '') + '>' +
+          esc(x.name) + '（' + esc(dmy_(x.date)) + '・' + esc(x.range) + '）</option>';
+      }).join('') + '</select>' +
+      '<div class="edit-row" style="margin-top:8px">' +
+      '<button class="ghost" onclick="toggleNewExam()">' +
+      (state.newExamOpen ? '取消新增' : '＋ 新增審查') + '</button></div>';
+
+    if (state.newExamOpen) h += newExamForm(d);
+
+    var ex = d.exams.filter(function (x) { return x.key === state.promoExam; })[0];
+    if (!ex) return h + '<p class="svc-hint">揀咗場次先可以剔選會員。</p></div>';
+    allowed = ex.grades;
+    h += '<p class="svc-hint">日期 ' + esc(dmy_(ex.date)) + '｜可登記：' + esc(allowed.join('、')) + '</p>';
+  } else {
+    h += '<label>館內試日期</label>' +
+      '<input type="date" value="' + esc(state.promoDate || '') + '" onchange="setPromoDate(this.value)">';
+    if (!state.promoDate) return h + '<p class="svc-hint">填咗日期先可以剔選會員。</p></div>';
+    allowed = d.grades.filter(function (g) {
+      return (d.kyuGrades || []).indexOf(g) > -1 && g !== '級外';
+    });
+    h += '<p class="svc-hint">可登記：' + esc(allowed.join('、')) + '</p>';
+  }
+
+  /* 會員清單（只列活躍） */
+  var list = d.members.filter(function (m) { return m.active; });
+  h += '<div class="rota-no" style="margin-top:12px">剔選合格會員（' +
+    Object.keys(state.promoPick || {}).length + ' 人）</div>';
+
+  list.forEach(function (m) {
+    var picked = (state.promoPick || {})[m.id];
+    var tooLow = isDanMode && gradeRankFE(m.grade) < gradeRankFE('三級');
+    h += '<div class="promo-row' + (picked ? ' on' : '') + '">' +
+      '<label class="svc-item" style="flex:1;min-width:0">' +
+      '<input type="checkbox"' + (picked ? ' checked' : '') +
+      ' onchange="togglePromoPick(\'' + esc(m.id) + '\',this.checked)">' +
+      '<span>' + esc(m.name) + ' <span style="color:var(--ink-soft);font-size:12px">' +
+      esc(m.grade || '未填') + (tooLow ? ' ⚠' : '') + '</span></span></label>' +
+      (picked ? '<select style="flex:0 0 96px" onchange="setPromoGrade(\'' + esc(m.id) + '\',this.value)">' +
+        allowed.map(function (g) {
+          return '<option value="' + esc(g) + '"' + (picked.grade === g ? ' selected' : '') + '>' + esc(g) + '</option>';
+        }).join('') + '</select>' : '') +
+      '</div>';
+  });
+
+  if (Object.keys(state.promoPick || {}).length) {
+    h += '<div class="edit-row" style="margin-top:12px">' +
+      '<button class="primary" onclick="submitPromote()">登記</button>' +
+      '<button class="ghost" onclick="state.promoPick={};renderStats()">清空</button></div>';
+  }
+  return h + '</div>';
+}
+
+function newExamForm(d) {
+  var dan = d.danGrades || [];
+  return '<div class="card" style="margin-top:8px">' +
+    '<label>審查名</label><input id="nxName" placeholder="例：2026秋季審查">' +
+    '<label>日期</label><input id="nxDate" type="date">' +
+    '<label>可考段位（由…至…）</label><div class="edit-row">' +
+    '<select id="nxFrom" style="flex:1">' + dan.map(function (g) {
+      return '<option>' + esc(g) + '</option>'; }).join('') + '</select>' +
+    '<span style="align-self:center">至</span>' +
+    '<select id="nxTo" style="flex:1">' + dan.map(function (g, i) {
+      return '<option' + (i === 2 ? ' selected' : '') + '>' + esc(g) + '</option>'; }).join('') + '</select>' +
+    '</div>' +
+    '<div style="margin-top:12px"><button class="primary" onclick="submitNewExam()">新增</button></div></div>';
+}
+
+function gradeRankFE(g) {
+  var arr = (state.memberList && state.memberList.grades) || [];
+  return arr.indexOf(String(g || '').trim());
+}
+function setPromoMode(m) { state.promoMode = m; state.promoPick = {}; renderStats(); }
+function setPromoExam(k) { state.promoExam = k; state.promoPick = {}; renderStats(); }
+function setPromoDate(v) { state.promoDate = v; renderStats(); }
+function toggleNewExam() { state.newExamOpen = !state.newExamOpen; renderStats(); }
+function togglePromoPick(id, on) {
+  if (!state.promoPick) state.promoPick = {};
+  if (on) state.promoPick[id] = { grade: '' };
+  else delete state.promoPick[id];
+  renderStats();
+}
+function setPromoGrade(id, g) {
+  if (state.promoPick[id]) state.promoPick[id].grade = g;
+  renderStats();
+}
+
+function submitNewExam() {
+  var f = { name: val('nxName'), date: val('nxDate'),
+            from: document.getElementById('nxFrom').value,
+            to: document.getElementById('nxTo').value };
+  if (!f.name || !f.date) return toast('請填審查名同日期');
+  toast('新增中…');
+  call('addExam', authPayload(), f).then(function (r) {
+    if (!r.ok) return toast(r.msg);
+    toast('已新增審查');
+    state.newExamOpen = false;
+    state.memberList = null;
+    call('getMemberList', authPayload()).then(function (d) {
+      state.memberList = d;
+      state.promoExam = r.key;
+      renderStats();
+    });
+  }).catch(function (e) { toast('失敗：' + e.message); });
+}
+
+function submitPromote() {
+  var picks = state.promoPick || {};
+  var isDanMode = state.promoMode !== 'kyu';
+  var list = Object.keys(picks).map(function (id) {
+    return { id: id, grade: picks[id].grade };
+  });
+  var blank = list.filter(function (x) { return !x.grade; });
+  if (blank.length) return toast('有 ' + blank.length + ' 位未揀新級位');
+  if (!confirm('登記 ' + list.length + ' 位會員嘅升段結果？')) return;
+  toast('登記中…');
+  call('batchPromote', authPayload(), isDanMode ? 'dan' : 'kyu',
+       state.promoExam || '', state.promoDate || '', list).then(function (r) {
+    if (!r.ok) return toast(r.msg);
+    var msg = '已登記 ' + r.saved + ' 人';
+    if (r.warn && r.warn.length) msg += '｜⚠ ' + r.warn.length + ' 位未夠三級：' + r.warn.join('、');
+    toast(msg);
+    state.promoPick = {}; state.memberList = null; state.ops = null;
+    render();
+  }).catch(function (e) { toast('失敗：' + e.message); });
+}
+
 function addMemberForm() {
   return '<div class="card ordpanel"><div class="rota-no">新增會員</div>' +
     '<label>會員編號</label><input id="nmId" inputmode="numeric">' +
@@ -2827,33 +3179,21 @@ function memDraft(id) {
 function editMember(id, field, v) { memDraft(id)[field] = v; renderStats(); }
 function editBow(id, i, field, v) { memDraft(id).bows[i][field] = v; renderStats(); }
 function editQuiver(id, i, v) { memDraft(id).quivers[i] = v; renderStats(); }
-function pickExamYear(id, y) {
-  state.examYear[id] = y;
-  state.examDate[id] = '';   // 手動揀年份 → 取消日子反查
-  renderStats();
-}
 function toggleExamOther(id, on) {
   state.examOther[id] = on;
-  if (on) { state.examDate[id] = ''; state.examYear[id] = ''; }
   renderStats();
 }
 /** 填咗升段日子 → 上面兩個下拉自動對應返嗰日嘅審查 */
-function pickPromoDate(id, v) {
-  memDraft(id).promoDate = v;
-  state.examDate[id] = v || '';
-  if (v) {
-    var hit = state.memberList.exams.filter(function (x) { return x.date === v; });
-    if (hit.length === 1) memDraft(id).exam = hit[0].name;   // 當日只有一個審查就自動填
-    state.examYear[id] = (v.match(/^(\d{4})/) || [])[1] || '';
-  }
-  renderStats();
+function dmy_(iso) {
+  var p = String(iso || '').slice(0, 10).split('-');
+  return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : (iso || '');
 }
-function pickExam(id, name) {
+/** 揀場次 → 同時填審查名同日子 */
+function pickExamSession(id, key) {
   var d = memDraft(id);
-  d.exam = name;
-  state.examDate[id] = '';   // 由清單揀 → 取消日子反查
-  var ex = state.memberList.exams.filter(function (x) { return x.name === name; })[0];
-  if (ex && ex.date) d.promoDate = ex.date;   // 揀咗審查自動填返日子，仍然改得
+  var ex = state.memberList.exams.filter(function (x) { return x.key === key; })[0];
+  if (ex) { d.exam = ex.name; d.promoDate = ex.date; }
+  else { d.exam = ''; d.promoDate = ''; }
   renderStats();
 }
 function toggleMemberRow(id) {
@@ -2929,18 +3269,55 @@ function dayLabel(day) {
 function toggleRecent() { state.recentAll = !state.recentAll; renderStats(); }
 
 /* 一段活動列表，dim = true 就用暗色細字（日常紀錄用） */
+/** 'YYYY-MM-DD HH:mm' → 分鐘數，方便比較時間差 */
+function minsOf_(at) {
+  var m = String(at || '').match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  if (!m) return null;
+  return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) / 60000;
+}
+
+var GROUP_WINDOW_MIN = 15;
+
+/** 同一個人、同一種動作、15 分鐘內 → 合併成一組 */
+function groupActs_(list) {
+  var out = [];
+  list.forEach(function (r) {
+    var last = out[out.length - 1];
+    var t = minsOf_(r.at);
+    if (last && last.action === r.action && last.who === r.who &&
+        t != null && last.tFirst != null &&
+        Math.abs(last.tFirst - t) <= GROUP_WINDOW_MIN &&
+        String(r.at).slice(0, 10) === String(last.at).slice(0, 10)) {
+      last.items.push(r.detail || '—');
+      last.atLast = r.at;
+      return;
+    }
+    out.push({
+      action: r.action, who: r.who, at: r.at, atLast: r.at,
+      tFirst: t, items: [r.detail || '—']
+    });
+  });
+  return out;
+}
+
 function actFeed(list, dim) {
   var h = '', lastDay = '';
-  list.forEach(function (r) {
-    var day = String(r.at).slice(0, 10);
+  groupActs_(list).forEach(function (g) {
+    var day = String(g.at).slice(0, 10);
     if (day !== lastDay) {
       lastDay = day;
       h += '<div class="day-sep">' + esc(dayLabel(day)) + '</div>';
     }
+    var n = g.items.length;
+    var t1 = String(g.atLast).slice(11, 16), t2 = String(g.at).slice(11, 16);
+    var timeTxt = (n > 1 && t1 !== t2) ? (t1 + '–' + t2) : t2;
+
     h += '<div class="card act' + (dim ? ' dim' : '') + '">' +
-      '<span class="act-tag ' + actClass(r.action) + '">' + esc(r.action) + '</span>' +
-      '<div class="act-body"><div class="act-detail">' + esc(r.detail || '—') + '</div>' +
-      '<div class="act-meta">' + esc(r.who) + ' · ' + esc(String(r.at).slice(11)) + '</div></div></div>';
+      '<span class="act-tag ' + actClass(g.action) + '">' + esc(g.action) + '</span>' +
+      '<div class="act-body">' +
+      (n > 1 ? '<div class="act-count">' + n + ' 項</div>' : '') +
+      '<div class="act-detail">' + g.items.map(esc).join('、') + '</div>' +
+      '<div class="act-meta">' + esc(g.who) + ' · ' + esc(timeTxt) + '</div></div></div>';
   });
   return h;
 }
@@ -2954,6 +3331,12 @@ function renderStats() {
     h += '<button class="repairbtn" onclick="toggleMemberList()">👥 會員名單' +
       (state.memberOpen ? ' ✕' : '') + '</button>';
     if (state.memberOpen) h += memberListPanel();
+
+    if (state.memberList && state.memberList.canEditGrade) {
+      h += '<button class="repairbtn" onclick="togglePromote()">🎓 登記升段結果' +
+        (state.promoteOpen ? ' ✕' : '') + '</button>';
+      if (state.promoteOpen) h += promotePanel();
+    }
   }
 
   /* ---- 排程進度＋月度公告（組長以上） ---- */
@@ -3069,7 +3452,42 @@ function renderStats() {
   main().innerHTML = h;
 }
 
+/* ---------- 回到最頂 ---------- */
+(function () {
+  var btn = document.getElementById('toTop');
+  var box = document.getElementById('main');
+  if (!btn || !box) return;
+  var ticking = false;
+  box.addEventListener('scroll', function () {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () {
+      // 捲落超過一個螢幕高先出現，唔會一開就擋住
+      if (box.scrollTop > box.clientHeight * 0.8) btn.classList.add('show');
+      else btn.classList.remove('show');
+      ticking = false;
+    });
+  }, { passive: true });
+  btn.addEventListener('click', function () {
+    try { box.scrollTo({ top: 0, behavior: 'smooth' }); }
+    catch (e) { box.scrollTop = 0; }
+  });
+})();
+
 /* ============ 啟動 ============ */
+/* 記返上次揀嘅語言；未揀過就跟瀏覽器（非中文 → 英文） */
+(function () {
+  var saved = null;
+  try { saved = localStorage.getItem('dojoLang'); } catch (e) {}
+  if (saved === 'en' || saved === 'zh') {
+    state.lang = saved;
+  } else {
+    var nav = (navigator.language || 'zh').toLowerCase();
+    state.lang = (nav.indexOf('zh') === 0) ? 'zh' : 'en';
+  }
+  applyLangChrome();
+})();
+
 render();
 </script>
 </body>
