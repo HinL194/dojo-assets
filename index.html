@@ -712,7 +712,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v26';
+var APP_VERSION = 'v28';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -757,6 +757,7 @@ var state = {
   promoPick: {},        // { 會員編號: { grade } }
   newExamOpen: false,
   memberEdits: {},      // 改咗但未儲存嘅會員資料
+  memberTouched: {},     // 邊個會員邊隻欄真係被郁過（儲存時只送呢啲）
   memberOpenId: null,   // 展開緊邊個會員
   memberShowAll: false, // 連非活躍會員一齊顯示
   addMemberOpen: false,
@@ -2045,7 +2046,7 @@ function clearSession_() {
   state.myEquip = null; state.myEquipDraft = null; state.myEquipDirty = false;
 
   // 未儲存草稿
-  state.pending = {}; state.memberEdits = {}; state.itemEdit = null;
+  state.pending = {}; state.memberEdits = {}; state.memberTouched = {}; state.itemEdit = null;
   state.catOrderDraft = null; state.reasonDraft = null; state.builder = null;
   state.svcSel = {}; state.svcBow = null; state.svcFrom = null;
   state.rotaEditingId = null; state.rotaEdit = false;
@@ -2815,7 +2816,7 @@ function toggleBowAll() { state.bowAllStats = !state.bowAllStats; renderStats();
 function toggleMemberList() {
   state.memberOpen = !state.memberOpen;
   if (!state.memberOpen) {
-    state.memberEdits = {}; state.memberOpenId = null; state.addMemberOpen = false;
+    state.memberEdits = {}; state.memberTouched = {}; state.memberOpenId = null; state.addMemberOpen = false;
     state.memberQ = ''; state.memberQRaw = ''; state.examOther = {};
   }
   if (state.memberOpen && !state.memberList) {
@@ -3047,10 +3048,26 @@ function promotePanel() {
     h += '<p class="svc-hint">可登記：' + esc(allowed.join('、')) + '</p>';
   }
 
-  /* 會員清單（只列活躍） */
-  var list = d.members.filter(function (m) { return m.active; });
+  /* 會員清單（只列活躍）。
+     館內試只考級位，所以已經有三級或以上（含段位）嘅人根本考唔到，唔應該列出。
+     段位審查就照列全部，未夠三級嘅會標 ⚠ 但唔會擋（方便處理外來已有段位嘅會員）。 */
+  var maxKyu = gradeRankFE('三級');
+  var list = d.members.filter(function (m) {
+    if (!m.active) return false;
+    if (isDanMode) return true;
+    var r = gradeRankFE(m.grade);
+    return r < maxKyu;          // 未填（-1）／級外／一級／二級
+  });
+
   h += '<div class="rota-no" style="margin-top:12px">剔選合格會員（' +
     Object.keys(state.promoPick || {}).length + ' 人）</div>';
+
+  if (!list.length) {
+    h += '<div class="empty">' +
+      (isDanMode ? '冇活躍會員' : '冇會員仲有級位可以升（三級以上要考段）') +
+      '</div></div>';
+    return h;
+  }
 
   list.forEach(function (m) {
     var picked = (state.promoPick || {})[m.id];
@@ -3143,6 +3160,7 @@ function submitPromote() {
        state.promoExam || '', state.promoDate || '', list).then(function (r) {
     if (!r.ok) return toast(r.msg);
     var msg = '已登記 ' + r.saved + ' 人';
+    if (r.skipped && r.skipped.length) msg += '｜跳過 ' + r.skipped.length + ' 位：' + r.skipped.join('、');
     if (r.warn && r.warn.length) msg += '｜⚠ ' + r.warn.length + ' 位未夠三級：' + r.warn.join('、');
     toast(msg);
     state.promoPick = {}; state.memberList = null; state.ops = null;
@@ -3176,9 +3194,16 @@ function memDraft(id) {
   }
   return state.memberEdits[id];
 }
-function editMember(id, field, v) { memDraft(id)[field] = v; renderStats(); }
-function editBow(id, i, field, v) { memDraft(id).bows[i][field] = v; renderStats(); }
-function editQuiver(id, i, v) { memDraft(id).quivers[i] = v; renderStats(); }
+/** 邊個會員邊隻欄真係被人郁過——儲存嗰陣只送呢啲，
+ *  唔會因為個編輯器開住成份 snapshot 就連冇改嘅欄都送埋去，
+ *  蓋走第二個人啱啱先改嘅資料。 */
+function markTouched(id, key) {
+  if (!state.memberTouched[id]) state.memberTouched[id] = {};
+  state.memberTouched[id][key] = true;
+}
+function editMember(id, field, v) { memDraft(id)[field] = v; markTouched(id, field); renderStats(); }
+function editBow(id, i, field, v) { memDraft(id).bows[i][field] = v; markTouched(id, 'bow' + i); renderStats(); }
+function editQuiver(id, i, v) { memDraft(id).quivers[i] = v; markTouched(id, 'quiver' + i); renderStats(); }
 function toggleExamOther(id, on) {
   state.examOther[id] = on;
   renderStats();
@@ -3194,6 +3219,7 @@ function pickExamSession(id, key) {
   var ex = state.memberList.exams.filter(function (x) { return x.key === key; })[0];
   if (ex) { d.exam = ex.name; d.promoDate = ex.date; }
   else { d.exam = ''; d.promoDate = ''; }
+  markTouched(id, 'exam'); markTouched(id, 'promoDate');
   renderStats();
 }
 function toggleMemberRow(id) {
@@ -3201,16 +3227,31 @@ function toggleMemberRow(id) {
   renderStats();
 }
 function toggleShowAll() { state.memberShowAll = !state.memberShowAll; renderStats(); }
-function cancelMemberEdits() { state.memberEdits = {}; renderStats(); }
+function cancelMemberEdits() { state.memberEdits = {}; state.memberTouched = {}; renderStats(); }
 
 function saveMemberEdits() {
-  var changes = Object.keys(state.memberEdits).map(function (k) { return state.memberEdits[k]; });
+  var changes = Object.keys(state.memberEdits).map(function (id) {
+    var draft = state.memberEdits[id];
+    var touched = state.memberTouched[id] || {};
+    var ch = { id: id };
+    ['grade', 'promoDate', 'exam', 'active'].forEach(function (f) {
+      if (touched[f]) ch[f] = draft[f];
+    });
+    var bows = {};
+    [0, 1, 2].forEach(function (i) { if (touched['bow' + i]) bows[i] = draft.bows[i]; });
+    if (Object.keys(bows).length) ch.bows = bows;
+    var quivers = {};
+    [0, 1, 2].forEach(function (i) { if (touched['quiver' + i]) quivers[i] = draft.quivers[i]; });
+    if (Object.keys(quivers).length) ch.quivers = quivers;
+    return ch;
+  }).filter(function (ch) { return Object.keys(ch).length > 1; });   // 淨係 id、冇任何改動就唔送
+
   if (!changes.length) return;
   toast('儲存中…');
   call('saveMembers', authPayload(), changes).then(function (r) {
     if (!r.ok) return toast(r.msg);
     toast('已儲存 ' + r.saved + ' 項');
-    state.memberEdits = {}; state.memberList = null;
+    state.memberEdits = {}; state.memberTouched = {}; state.memberList = null;
     call('getMemberList', authPayload()).then(function (d) {
       state.memberList = d; renderStats();
     });
