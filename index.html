@@ -712,7 +712,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v31';
+var APP_VERSION = 'v32';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -881,7 +881,7 @@ var I18N = {
     /* 我的資料 */
     myData: '我的資料', name: '姓名', role: '角色',
     myGear: '我嘅裝備', ownBows: '自有弓（最多 3 張）', quivers: '箭筒（最多 3 個）',
-    color: '顏色', mei: '銘', saveGear: '儲存裝備', gearSaved: '已儲存裝備',
+    color: '顏色', bowColor: '弓卷/弓袋顏色', mei: '銘', saveGear: '儲存裝備', gearSaved: '已儲存裝備',
     changePin: '更改 PIN', currentPin: '目前 PIN',
     newPin: '新 PIN（4 至 8 個數字）', newPin2: '再輸入新 PIN',
     fillThree: '請填齊三格', pinMismatch: '兩次輸入嘅新 PIN 唔一樣',
@@ -935,7 +935,7 @@ var I18N = {
 
     myData: 'My Profile', name: 'Name', role: 'Role',
     myGear: 'My Equipment', ownBows: 'My bows (up to 3)', quivers: 'Quivers (up to 3)',
-    color: 'Colour', mei: 'Mei', saveGear: 'Save equipment', gearSaved: 'Equipment saved',
+    color: 'Colour', bowColor: 'Bow-wrap/bag colour', mei: 'Mei', saveGear: 'Save equipment', gearSaved: 'Equipment saved',
     changePin: 'Change PIN', currentPin: 'Current PIN',
     newPin: 'New PIN (4–8 digits)', newPin2: 'Confirm new PIN',
     fillThree: 'Please fill in all three fields', pinMismatch: 'The two new PINs do not match',
@@ -1995,7 +1995,7 @@ function myEquipCard() {
   [0, 1, 2].forEach(function (i) {
     var b = d.bows[i] || {};
     h += '<div class="edit-row" style="margin-bottom:6px">' +
-      '<input style="flex:1" placeholder="' + t('color') + '" value="' + esc(b.color || '') + '" ' +
+      '<input style="flex:1" placeholder="' + t('bowColor') + '" value="' + esc(b.color || '') + '" ' +
       'onchange="editMyBow(' + i + ',\'color\',this.value)">' +
       '<input style="flex:1.3" placeholder="' + t('mei') + '" value="' + esc(b.mei || '') + '" ' +
       'onchange="editMyBow(' + i + ',\'mei\',this.value)">' +
@@ -2972,7 +2972,7 @@ function memberEditor(m, cur, d) {
   [0, 1, 2].forEach(function (i) {
     var b = cur.bows[i] || {};
     h += '<div class="edit-row" style="margin-bottom:6px">' +
-      '<input style="flex:1" placeholder="顏色" ' + (ro ? 'disabled' : '') + ' value="' + esc(b.color || '') + '" ' +
+      '<input style="flex:1" placeholder="弓卷/弓袋顏色" ' + (ro ? 'disabled' : '') + ' value="' + esc(b.color || '') + '" ' +
       'onchange="editBow(\'' + esc(m.id) + '\',' + i + ',\'color\',this.value)">' +
       '<input style="flex:1.3" placeholder="銘" ' + (ro ? 'disabled' : '') + ' value="' + esc(b.mei || '') + '" ' +
       'onchange="editBow(\'' + esc(m.id) + '\',' + i + ',\'mei\',this.value)">' +
