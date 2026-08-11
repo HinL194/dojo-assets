@@ -712,7 +712,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v28';
+var APP_VERSION = 'v31';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -862,6 +862,7 @@ var I18N = {
     bowCheck: '🏹 公家弓檢查維修',
     svcResult: '檢查結果（可多選）',
     svcOther: '其他（自由填寫）', svcNote: '備註（選填）',
+    svcForMember: '代其他會員登記（會員編號，留空 = 自己）',
     svcHint: '撳弓號登記已保養／檢查結果',
     pickResult: '請揀檢查結果', svcSaved: '已記錄保養',
     svcAllDone: '已記錄，本月檢查全部完成 ✓',
@@ -917,6 +918,7 @@ var I18N = {
     bowCheck: '🏹 Dojo Bow Inspection',
     svcResult: 'Inspection result (multiple choice)',
     svcOther: 'Other (free text)', svcNote: 'Notes (optional)',
+    svcForMember: 'Log on behalf of (member no., blank = yourself)',
     svcHint: 'Tap a bow number to log its inspection result',
     pickResult: 'Please select a result', svcSaved: 'Inspection logged',
     svcAllDone: 'Logged — all bows inspected this month ✓',
@@ -990,7 +992,6 @@ function moonSvg(p, size, tilt) {
   var r = size / 2 - 1, cx = size / 2, cy = size / 2;
   var a = r * Math.cos(2 * Math.PI * p);          // 明暗界線橢圓嘅橫半軸
   var illum = (1 - Math.cos(2 * Math.PI * p)) / 2;
-  var waxing = p < 0.5;
   var lit;
   if (illum < 0.015) {
     // 新月：冇亮面，畫一個實心但暗淡嘅月盤（同月相說明圖一致）
@@ -999,8 +1000,11 @@ function moonSvg(p, size, tilt) {
   } else if (illum > 0.985) {
     lit = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="currentColor"/>';
   } else {
-    var semiSweep = waxing ? 1 : 0;                       // 亮邊半圓
-    var termSweep = waxing ? (a > 0 ? 0 : 1) : (a > 0 ? 1 : 0);  // 明暗界線
+    /* 亮邊永遠先畫喺右邊（tilt = 0 嘅基準方向），再交俾下面嘅 rotate 擺去真實方向。
+       ⚠️ 唔可以喺呢度按盈/虧再翻轉左右 —— tilt 本身已經包含咗亮邊指向邊，
+       兩者一齊做就會翻轉兩次，虧月會畫反。 */
+    var semiSweep = 1;                            // 右半圓＝亮邊外緣
+    var termSweep = (a > 0) ? 0 : 1;              // 蛾眉月界線向右鼓，凸月向左鼓
     lit = '<path d="M ' + cx + ' ' + (cy - r) +
       ' A ' + r + ' ' + r + ' 0 0 ' + semiSweep + ' ' + cx + ' ' + (cy + r) +
       ' A ' + Math.abs(a).toFixed(2) + ' ' + r + ' 0 0 ' + termSweep + ' ' + cx + ' ' + (cy - r) +
@@ -1324,6 +1328,8 @@ function svcForm(bowId) {
   });
   h += '<label style="margin-top:8px">' + t('svcOther') + '</label><input id="svcOther">' +
     '<label>' + t('svcNote') + '</label><input id="svcNote">' +
+    (isOps() ? '<label>' + t('svcForMember') + '</label>' +
+      '<input id="svcFor" inputmode="numeric" placeholder="' + esc(state.auth ? state.auth.id : '') + '">' : '') +
     '<div class="edit-row" style="margin-top:12px">' +
     '<button class="primary" onclick="submitSvc(\'' + esc(bowId) + '\')">' + t('submit') + '</button>' +
     '<button class="ghost" onclick="openSvc(\'' + esc(bowId) + '\',\'' + (state.svcFrom || 'stats') + '\')">' + t('cancel') + '</button>' +
@@ -1333,9 +1339,10 @@ function svcForm(bowId) {
 function submitSvc(bowId) {
   var items = Object.keys(state.svcSel || {});
   var other = val('svcOther'), note = val('svcNote');
+  var forId = isOps() ? val('svcFor') : '';
   if (!items.length && !other) return toast(t('pickResult'));
   toast('提交中…');
-  call('serviceBow', authPayload(), bowId, items, note, other).then(function (r) {
+  call('serviceBow', authPayload(), bowId, items, note, other, forId).then(function (r) {
     if (!r.ok) return toast(r.msg);
     toast(r.monthComplete ? t('svcAllDone') : t('svcSaved'));
     state.svcBow = null; state.svcSel = {};
