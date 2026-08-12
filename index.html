@@ -240,6 +240,14 @@
     margin:16px 2px 8px;display:flex;align-items:center;gap:8px;
   }
   .section-label::after{content:'';flex:1;height:1px;background:var(--line)}
+  /* 組員貢獻嗰行右邊嘅「更新」細掣（貢獻有 5 分鐘 cache） */
+  .contrib-refresh{
+    flex:0 0 auto;background:none;border:1px solid var(--line);border-radius:6px;
+    color:var(--ai);font-family:inherit;font-size:11.5px;letter-spacing:0;
+    padding:3px 9px;cursor:pointer;
+  }
+  .contrib-refresh:active{background:var(--paper)}
+  .contrib-refresh[disabled]{opacity:.5;cursor:default}
 
   .card{
     background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
@@ -718,7 +726,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v38';
+var APP_VERSION = 'v39';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -3253,6 +3261,20 @@ function toggleMemberRow(id) {
   renderStats();
 }
 
+/* ---------- 組員貢獻：即場重新計 ---------- */
+function doRefreshContrib(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '更新中…'; }
+  call('refreshContributions', authPayload()).then(function (list) {
+    if (state.ops) state.ops.contributions = list;
+    state.contribDetail = {};   // 詳情由同一份紀錄計出，一齊重攞先唔會對唔上
+    renderStats();
+    toast('貢獻排行已更新');
+  }).catch(function (err) {
+    if (btn) { btn.disabled = false; btn.textContent = '↻ 更新'; }
+    toast('更新失敗：' + err.message);
+  });
+}
+
 /* ---------- 組員貢獻詳情（撳個名展開） ---------- */
 function toggleContrib(id) {
   state.contribOpenId = (state.contribOpenId === id) ? null : id;
@@ -3536,7 +3558,10 @@ function renderStats() {
   }
 
   if (d.canViewContributions) {
-    h += '<div class="section-label">組員貢獻（近 90 日動作次數）</div>';
+    /* 貢獻排行有 5 分鐘 cache（見 Code.gs getContributions_），
+       所以俾個掣即場重新計，唔使等佢自然過期。 */
+    h += '<div class="section-label">組員貢獻（近 90 日動作次數）' +
+      '<button class="contrib-refresh" onclick="doRefreshContrib(this)">↻ 更新</button></div>';
     var contribs = d.contributions || [];
     if (!contribs.length) {
       h += '<div class="empty">未有紀錄</div>';
