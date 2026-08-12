@@ -712,7 +712,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v32';
+var APP_VERSION = 'v34';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -1304,9 +1304,17 @@ function openSvc(bowId, from) {
   state.svcBow = (state.svcBow === bowId) ? null : bowId;
   state.svcFrom = from;
   state.svcSel = {};
+  state.svcOtherVal = ''; state.svcNoteVal = ''; state.svcForVal = '';
   if (from === 'today') renderToday(); else renderStats();
 }
+/* svcToggle 撳一下 checkbox 就會令成個表重畫（renderToday/renderStats
+   係成個 innerHTML 掟晒佢重嚟），所以重畫之前要摷起「其他／備註／代登記
+   編號」呢三格入面已經打咗嘅字，唔係就會歸晒零 —— 呢三格淨係喺 DOM 度
+   存在，冇存落 state，之前試過打咗代登記編號再撳 checkbox 就清晒。 */
 function svcToggle(item, checked) {
+  state.svcOtherVal = val('svcOther');
+  state.svcNoteVal = val('svcNote');
+  state.svcForVal = val('svcFor');
   if (item === '不需要維修' && checked) state.svcSel = {};   // 互斥：清走其他
   if (checked) {
     if (item !== '不需要維修') delete state.svcSel['不需要維修'];
@@ -1326,10 +1334,13 @@ function svcForm(bowId) {
     h += '<label class="svc-item"><input type="checkbox"' + (on ? ' checked' : '') +
       ' onchange="svcToggle(\'' + it + '\',this.checked)"><span>' + esc(it) + '</span></label>';
   });
-  h += '<label style="margin-top:8px">' + t('svcOther') + '</label><input id="svcOther">' +
-    '<label>' + t('svcNote') + '</label><input id="svcNote">' +
+  h += '<label style="margin-top:8px">' + t('svcOther') + '</label>' +
+    '<input id="svcOther" value="' + esc(state.svcOtherVal || '') + '">' +
+    '<label>' + t('svcNote') + '</label>' +
+    '<input id="svcNote" value="' + esc(state.svcNoteVal || '') + '">' +
     (isOps() ? '<label>' + t('svcForMember') + '</label>' +
-      '<input id="svcFor" inputmode="numeric" placeholder="' + esc(state.auth ? state.auth.id : '') + '">' : '') +
+      '<input id="svcFor" inputmode="numeric" value="' + esc(state.svcForVal || '') + '" ' +
+      'placeholder="' + esc(state.auth ? state.auth.id : '') + '">' : '') +
     '<div class="edit-row" style="margin-top:12px">' +
     '<button class="primary" onclick="submitSvc(\'' + esc(bowId) + '\')">' + t('submit') + '</button>' +
     '<button class="ghost" onclick="openSvc(\'' + esc(bowId) + '\',\'' + (state.svcFrom || 'stats') + '\')">' + t('cancel') + '</button>' +
@@ -1346,6 +1357,7 @@ function submitSvc(bowId) {
     if (!r.ok) return toast(r.msg);
     toast(r.monthComplete ? t('svcAllDone') : t('svcSaved'));
     state.svcBow = null; state.svcSel = {};
+    state.svcOtherVal = ''; state.svcNoteVal = ''; state.svcForVal = '';
     state.publicData = null; state.ops = null; state.bow = null;
     render();
   }).catch(function (e) { toast('失敗：' + e.message); });
@@ -2056,6 +2068,7 @@ function clearSession_() {
   state.pending = {}; state.memberEdits = {}; state.memberTouched = {}; state.itemEdit = null;
   state.catOrderDraft = null; state.reasonDraft = null; state.builder = null;
   state.svcSel = {}; state.svcBow = null; state.svcFrom = null;
+  state.svcOtherVal = ''; state.svcNoteVal = ''; state.svcForVal = '';
   state.rotaEditingId = null; state.rotaEdit = false;
 
   // 介面開合／篩選
@@ -3233,6 +3246,43 @@ function toggleMemberRow(id) {
   state.memberOpenId = (state.memberOpenId === id) ? null : id;
   renderStats();
 }
+
+/* ---------- 組員貢獻詳情（撳個名展開） ---------- */
+function toggleContrib(id) {
+  state.contribOpenId = (state.contribOpenId === id) ? null : id;
+  renderStats();
+}
+function contribDetailHtml_(id) {
+  var cache = state.contribDetail || (state.contribDetail = {});
+  if (!cache.hasOwnProperty(id)) {
+    cache[id] = null;   // 標記「已經開始攞」，唔會同一個人撳多次就叫多次 API
+    call('getContributionDetail', authPayload(), id).then(function (r) {
+      cache[id] = r;
+      if (state.contribOpenId === id) renderStats();
+    }).catch(function (err) {
+      cache[id] = { error: err.message };
+      if (state.contribOpenId === id) renderStats();
+    });
+  }
+  var d = cache[id];
+  var h = '<div class="card" style="margin-top:-8px;border-top-left-radius:0;border-top-right-radius:0" onclick="event.stopPropagation()">';
+  if (!d) {
+    h += '<div class="loading">載入中</div>';
+  } else if (d.error) {
+    h += '<p class="svc-hint">載入失敗：' + esc(d.error) + '</p>';
+  } else {
+    h += '<div class="rota-no">組成</div>';
+    h += d.breakdown.length ? d.breakdown.map(function (b) {
+      return '<div class="kv"><span class="k">' + esc(b.action) + '</span><b>' + b.count + ' 次</b></div>';
+    }).join('') : '<div class="empty">未有紀錄</div>';
+    h += '<div class="rota-no" style="margin-top:12px">最近 10 次</div>';
+    h += d.recent.length ? d.recent.map(function (r) {
+      return '<div class="act-meta" style="margin-bottom:6px">' + esc(String(r.at).slice(0, 16)) +
+        ' · ' + esc(r.action) + (r.detail ? '：' + esc(r.detail) : '') + '</div>';
+    }).join('') : '<div class="empty">未有紀錄</div>';
+  }
+  return h + '</div>';
+}
 function toggleShowAll() { state.memberShowAll = !state.memberShowAll; renderStats(); }
 function cancelMemberEdits() { state.memberEdits = {}; state.memberTouched = {}; renderStats(); }
 
@@ -3487,11 +3537,15 @@ function renderStats() {
     } else {
       var max = contribs[0].count;
       contribs.forEach(function (c, i) {
-        h += '<div class="card rank"><span class="pos">' + (i + 1) + '</span>' +
+        var open = state.contribOpenId === c.id;
+        h += '<div class="card rank" style="cursor:pointer" onclick="toggleContrib(\'' + esc(c.id) + '\')">' +
+          '<span class="pos">' + (i + 1) + '</span>' +
           '<div class="bar-wrap"><div>' + esc(c.name) +
           ' <span style="color:var(--ink-soft);font-size:12px">' + esc(c.id) + '</span></div>' +
           '<div class="bar" style="width:' + Math.max(8, Math.round(c.count / max * 100)) + '%"></div></div>' +
-          '<span class="cnt">' + c.count + '</span></div>';
+          '<span class="cnt">' + c.count + '</span>' +
+          '<span class="caret' + (open ? ' up' : '') + '" style="margin-left:4px">⌄</span></div>';
+        if (open) h += contribDetailHtml_(c.id);
       });
     }
   }
