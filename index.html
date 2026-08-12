@@ -125,10 +125,10 @@
     transition-delay:.22s;
     text-shadow:0 0 6px rgba(242,239,230,.6);
   }
-  /* 新月：月亮本身冇光，所以唔發光 —— 改為天色轉暗，字浮出嚟 */
-  header{transition:background-color .5s ease}
-  .hdr-new.hdr-lit{background:#0B1622}
-  .hdr-new.hdr-lit #moonIcon{filter:none}
+  /* 新月：月亮本身冇光，所以唔發光 —— 底色全程唔變，只係名同月亮輪廓
+     一齊隨雲開合（雲返嚟嗰陣，月亮輪廓都真係隱形，唔淨係俾雲遮住） */
+  .hdr-new #moonIcon{opacity:0}
+  .hdr-new.hdr-lit #moonIcon{opacity:1;filter:none}
   .hdr-new.hdr-lit .phase{
     opacity:.92;color:#8FA6C2;text-shadow:none;
   }
@@ -209,9 +209,12 @@
      正常排版佔位（唔再 position:fixed），永遠貼實螢幕最底，
      唔會再受彈跳捲動影響。 */
   nav{
+    /* 高度定死做 --nav-h（同之前總高度一樣，靠佢定位嘅浮動掣唔使郁）。
+       改用 align-items:center 令四個掣喺成個高度入面置中，等安全區
+       上下平分，唔會成截淨係屈喺最底、睇落唔成比例。 */
     flex:0 0 auto;background:var(--card);
-    border-top:1px solid var(--line);display:flex;z-index:20;
-    padding-bottom:var(--safe-b);
+    border-top:1px solid var(--line);display:flex;align-items:center;
+    z-index:20;height:var(--nav-h);
   }
   nav button{
     flex:1;background:none;border:none;padding:10px 0 8px;font-size:13px;
@@ -330,6 +333,9 @@
     width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;
     font-size:15px;font-family:inherit;background:#fff;color:var(--ink);
   }
+  /* iOS Safari 嘅 type="date" 有個老毛病：就算 width:100% 都可能唔理，
+     原生日期揀選器嘅內容將個框撐闊過個卡嘅邊界。加返 max-width 兜住。 */
+  input[type="date"]{max-width:100%}
   input:focus,textarea:focus,select:focus{outline:2px solid var(--ai);border-color:var(--ai)}
   label{font-size:13px;color:var(--ink-soft);display:block;margin:10px 0 4px}
 
@@ -712,7 +718,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v34';
+var APP_VERSION = 'v38';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -732,7 +738,7 @@ var state = {
   pending: {},          // 未儲存嘅物資數量改動 {編號: 數量}
   rotaOpen: false,      // 工作表 details 開咗未
   rotaEdit: false,      // 工作表編輯模式
-  fullMoonPlayed: false,// 滿月自動動畫播咗未（每次開網頁一次）
+  moonIntroPlayed: false,// 滿月／新月自動動畫播咗未（每次開網頁一次）
   dutyOpen: null,       // 今日工作邊張卡展開咗
   repairFormOpen: false,// 今日工作頁嘅「報維修」表單開咗未
   bow: null,            // 弓具資料
@@ -1035,9 +1041,9 @@ function renderMoon() {
   hdr.classList.toggle('hdr-new', m.name === '新月');
   hdr.classList.toggle('hdr-full', m.name === '滿月');
 
-  /* 滿月：一開網頁自動播一次動畫，之後月相名照常淡出 */
-  if (m.name === '滿月' && !state.fullMoonPlayed) {
-    state.fullMoonPlayed = true;
+  /* 滿月／新月：一開網頁自動播一次動畫，之後月相名（新月連埋月亮輪廓）照常淡出 */
+  if ((m.name === '滿月' || m.name === '新月') && !state.moonIntroPlayed) {
+    state.moonIntroPlayed = true;
     setTimeout(function () { showMoonInfo(); }, 450);
   }
   var btn = document.getElementById('moonBtn');
