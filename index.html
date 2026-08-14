@@ -590,7 +590,7 @@
   /* ---------- 公家弓 ---------- */
   .bow-grid{
     display:grid;gap:8px;align-items:start;
-    grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));
+    grid-template-columns:repeat(auto-fill, minmax(100px, 1fr));
   }
   .bow-grid .card{margin-bottom:0}
   .card.bow{padding:0;overflow:hidden}
@@ -726,7 +726,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v39';
+var APP_VERSION = 'v40';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -2220,7 +2220,7 @@ function renderBowList() {
       h += '<div class="' + cls + '">' +
         '<div class="bow-main" onclick="pickBow(\'' + esc(b.id) + '\')">' +
         '<div class="bow-no">' + esc(b.id) + '</div>' +
-        '<div class="bow-info"><div class="bow-brand">' + esc(b.brand) + '</div>' +
+        '<div class="bow-info"><div class="bow-brand">' + esc(String(b.brand).replace(/\bCarbon\b/i, 'C')) + '</div>' +
         '<div class="bow-meta">' + b.kg + 'kg' +
         (b.status !== '正常' ? ' · ' + esc(b.status) : '') +
         (d.isOps && b.needService ? ' · ' + t('needCheck') : '') + '</div></div>' +
