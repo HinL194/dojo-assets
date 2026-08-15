@@ -729,7 +729,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v41';
+var APP_VERSION = 'v42';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -2940,6 +2940,10 @@ function memberEditor(m, cur, d) {
   var isDanG = (d.danGrades || []).indexOf(cur.grade) > -1;
   var other = !!state.examOther[m.id];
 
+  /* ⚠️ 呢度以前係 `return h + '</div>'` —— 令所有唔係段位嘅會員（級位、級外、
+     級位未填）成個編輯器喺呢度收工，跳過咗後面嘅自有弓、箭筒、標籤同活躍。
+     結果係管理層根本登記唔到級位會員嘅弓具，亦改唔到佢哋嘅活躍狀態。
+     改成 if/else，令尾段無論邊個級位都行到。 */
   if (!isDanG) {
     /* 級位：唔使審查名 */
     h += '<label>升段日子（館內試）</label>' +
@@ -2950,52 +2954,46 @@ function memberEditor(m, cur, d) {
         '改成級位之後可以撳下面清走。<br>' +
         '<button class="ghost" style="margin-top:6px" onclick="editMember(\'' + esc(m.id) + '\',\'exam\',\'\')">清走審查名</button></p>';
     }
-    return h + '</div>';
-  }
-
-  /* 以下係段位 */
-  h += '<label class="svc-item" style="margin-top:12px">' +
-    '<input type="checkbox"' + (other ? ' checked' : '') + (ro ? ' disabled' : '') +
-    ' onchange="toggleExamOther(\'' + esc(m.id) + '\',this.checked)">' +
-    '<span>升段審查：其他（自行輸入）</span></label>';
-
-  h += '<label class="svc-item" style="margin-top:12px">' +
-    '<input type="checkbox"' + (other ? ' checked' : '') + (ro ? ' disabled' : '') +
-    ' onchange="toggleExamOther(\'' + esc(m.id) + '\',this.checked)">' +
-    '<span>其他（唔喺清單嘅審查）</span></label>';
-
-  if (other) {
-    h += '<label>審查名稱</label>' +
-      '<input ' + (ro ? 'disabled' : '') + ' placeholder="例：2024年度昇段審査" ' +
-      'value="' + esc(cur.exam || '') + '" ' +
-      'onchange="editMember(\'' + esc(m.id) + '\',\'exam\',this.value)">' +
-      '<label>升段日子</label>' +
-      '<input type="date" ' + (ro ? 'disabled' : '') + ' value="' + esc(cur.promoDate || '') + '" ' +
-      'onchange="editMember(\'' + esc(m.id) + '\',\'promoDate\',this.value)">';
   } else {
-    /* 單一場次下拉：最新排前，日期直接寫喺選項；揀咗自動填日子並鎖住 */
-    var pool = d.exams.filter(function (x) { return x.grades.indexOf(cur.grade) > -1; });
-    var curKey = (d.exams.filter(function (x) {
-      return x.name === cur.exam && x.date === cur.promoDate;
-    })[0] || {}).key || '';
+    /* 以下係段位 */
+    h += '<label class="svc-item" style="margin-top:12px">' +
+      '<input type="checkbox"' + (other ? ' checked' : '') + (ro ? ' disabled' : '') +
+      ' onchange="toggleExamOther(\'' + esc(m.id) + '\',this.checked)">' +
+      '<span>升段審查：其他（唔喺清單嘅審查，自行輸入）</span></label>';
 
-    h += '<label>升段審查（只列出有開「' + esc(cur.grade) + '」嘅場次）</label>' +
-      '<select ' + (ro ? 'disabled' : '') + ' onchange="pickExamSession(\'' + esc(m.id) + '\',this.value)">' +
-      '<option value="">— 未填 —</option>' +
-      pool.map(function (x) {
-        return '<option value="' + esc(x.key) + '"' + (curKey === x.key ? ' selected' : '') + '>' +
-          esc(x.name) + '（' + esc(dmy_(x.date)) + '）</option>';
-      }).join('') + '</select>';
+    if (other) {
+      h += '<label>審查名稱</label>' +
+        '<input ' + (ro ? 'disabled' : '') + ' placeholder="例：2024年度昇段審査" ' +
+        'value="' + esc(cur.exam || '') + '" ' +
+        'onchange="editMember(\'' + esc(m.id) + '\',\'exam\',this.value)">' +
+        '<label>升段日子</label>' +
+        '<input type="date" ' + (ro ? 'disabled' : '') + ' value="' + esc(cur.promoDate || '') + '" ' +
+        'onchange="editMember(\'' + esc(m.id) + '\',\'promoDate\',this.value)">';
+    } else {
+      /* 單一場次下拉：最新排前，日期直接寫喺選項；揀咗自動填日子並鎖住 */
+      var pool = d.exams.filter(function (x) { return x.grades.indexOf(cur.grade) > -1; });
+      var curKey = (d.exams.filter(function (x) {
+        return x.name === cur.exam && x.date === cur.promoDate;
+      })[0] || {}).key || '';
 
-    if (!pool.length) {
-      h += '<p class="svc-hint">未有開「' + esc(cur.grade) + '」嘅審查場次。' +
-        '可以喺報告頁「登記升段結果」新增，或者剔上面「其他」自行輸入。</p>';
+      h += '<label>升段審查（只列出有開「' + esc(cur.grade) + '」嘅場次）</label>' +
+        '<select ' + (ro ? 'disabled' : '') + ' onchange="pickExamSession(\'' + esc(m.id) + '\',this.value)">' +
+        '<option value="">— 未填 —</option>' +
+        pool.map(function (x) {
+          return '<option value="' + esc(x.key) + '"' + (curKey === x.key ? ' selected' : '') + '>' +
+            esc(x.name) + '（' + esc(dmy_(x.date)) + '）</option>';
+        }).join('') + '</select>';
+
+      if (!pool.length) {
+        h += '<p class="svc-hint">未有開「' + esc(cur.grade) + '」嘅審查場次。' +
+          '可以喺報告頁「登記升段結果」新增，或者剔上面「其他」自行輸入。</p>';
+      }
+
+      h += '<label>升段日子</label>' +
+        '<input type="date" readonly value="' + esc(cur.promoDate || '') + '" ' +
+        'style="background:var(--paper);color:var(--ink-soft)">' +
+        '<p class="svc-hint">日子由審查場次自動帶出。要自己填就剔「其他」。</p>';
     }
-
-    h += '<label>升段日子</label>' +
-      '<input type="date" readonly value="' + esc(cur.promoDate || '') + '" ' +
-      'style="background:var(--paper);color:var(--ink-soft)">' +
-      '<p class="svc-hint">日子由審查場次自動帶出。要自己填就剔「其他」。</p>';
   }
 
   /* 自有弓 */
