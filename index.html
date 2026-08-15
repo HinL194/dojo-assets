@@ -386,6 +386,9 @@
   /* 一串標籤。.multi 本身有 margin-left，排成行嗰陣第一粒要收返。 */
   .tag-row{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
   .tag-row .multi{margin-left:0}
+  /* 標籤揀選：同 .chips 唔同，呢度要換行唔要橫向捲，因為標籤數量會慢慢多 */
+  .tag-pick{display:flex;flex-wrap:wrap;gap:6px}
+  .tag-pick .chip-btn{flex:0 0 auto}
 
   /* 搜尋 + 篩選 */
   .search{margin-bottom:9px}
@@ -729,7 +732,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v42';
+var APP_VERSION = 'v43';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -3023,9 +3026,32 @@ function memberEditor(m, cur, d) {
      所以唔可以沿用上面個 ro（佢跟緊級位權限，導師改得級位）。 */
   if (d.canViewTag) {
     h += '<div class="rota-no" style="margin-top:14px">標籤</div>';
-    h += (cur.tags && cur.tags.length)
-      ? tagPills(cur.tags)
-      : '<p class="svc-hint">未有標籤</p>';
+    if (!d.canEditTag) {
+      h += (cur.tags && cur.tags.length)
+        ? tagPills(cur.tags)
+        : '<p class="svc-hint">未有標籤</p>';
+    } else {
+      var mine = cur.tags || [];
+      /* 全館現有標籤 ＋ 佢自己嘅（可能有啲係啱啱加、未 reload 所以未入 allTags） */
+      var pool = (d.allTags || []).slice();
+      mine.forEach(function (t) { if (pool.indexOf(t) === -1) pool.push(t); });
+
+      h += '<div class="tag-pick">';
+      pool.forEach(function (t) {
+        var on = mine.indexOf(t) > -1;
+        h += '<button class="chip-btn' + (on ? ' on' : '') + '" ' +
+          'onclick="toggleMemberTag(\'' + esc(m.id) + '\',\'' + esc(t) + '\')">' +
+          (on ? '✓ ' : '') + '#' + esc(t) + '</button>';
+      });
+      h += '</div>';
+
+      h += '<div class="edit-row" style="margin-top:8px">' +
+        '<input style="flex:1" id="newTag_' + esc(m.id) + '" maxlength="12" placeholder="新標籤（例：週三班）" ' +
+        'onkeydown="if(event.key===\'Enter\'){event.preventDefault();addMemberTag(\'' + esc(m.id) + '\')}">' +
+        '<button class="ghost" style="flex:0 0 76px" onclick="addMemberTag(\'' + esc(m.id) + '\')">＋ 加</button>' +
+        '</div>';
+      if (!mine.length) h += '<p class="svc-hint">未有標籤。撳上面嘅標籤加落去，或者自己打一個新嘅。</p>';
+    }
   }
 
   /* 活躍 */
@@ -3242,7 +3268,10 @@ function memDraft(id) {
     state.memberEdits[id] = {
       id: id, grade: m.grade, promoDate: m.promoDate, exam: m.exam, active: m.active,
       bows: m.bows.map(function (b) { return { color: b.color, mei: b.mei, kg: b.kg }; }),
-      quivers: m.quivers.slice()
+      quivers: m.quivers.slice(),
+      /* 冇權限睇標籤嗰陣後端唔會出 m.tags，所以要有 fallback ——
+         如果留咗 undefined，一旦有嘢標咗 touched 就會抹走人哋啲標籤。 */
+      tags: (m.tags || []).slice()
     };
   }
   return state.memberEdits[id];
@@ -3257,6 +3286,36 @@ function markTouched(id, key) {
 function editMember(id, field, v) { memDraft(id)[field] = v; markTouched(id, field); renderStats(); }
 function editBow(id, i, field, v) { memDraft(id).bows[i][field] = v; markTouched(id, 'bow' + i); renderStats(); }
 function editQuiver(id, i, v) { memDraft(id).quivers[i] = v; markTouched(id, 'quiver' + i); renderStats(); }
+
+/* ---- 標籤 ---- */
+/** 撳現有標籤 = 加／減。已經有就拎走，冇就加返。 */
+function toggleMemberTag(id, tag) {
+  var dr = memDraft(id);
+  var i = dr.tags.indexOf(tag);
+  if (i > -1) dr.tags.splice(i, 1);
+  else {
+    if (dr.tags.length >= 8) return toast('一個會員最多 8 個標籤');
+    dr.tags.push(tag);
+  }
+  markTouched(id, 'tags');
+  renderStats();
+}
+/** 自由輸入一個新標籤。剝走頭嘅 # 同逗號 —— 逗號係分隔符，
+ *  留喺入面下次讀返出嚟會裂做兩個標籤。後端一樣會再洗一次。 */
+function addMemberTag(id) {
+  var el = document.getElementById('newTag_' + id);
+  if (!el) return;
+  var t = String(el.value || '').trim().replace(/^#+/, '').replace(/,/g, '').trim();
+  el.value = '';
+  if (!t) return;
+  if (t.length > 12) t = t.slice(0, 12);
+  var dr = memDraft(id);
+  if (dr.tags.indexOf(t) > -1) return toast('已經有呢個標籤');
+  if (dr.tags.length >= 8) return toast('一個會員最多 8 個標籤');
+  dr.tags.push(t);
+  markTouched(id, 'tags');
+  renderStats();
+}
 function toggleExamOther(id, on) {
   state.examOther[id] = on;
   renderStats();
@@ -3338,7 +3397,7 @@ function saveMemberEdits() {
     var draft = state.memberEdits[id];
     var touched = state.memberTouched[id] || {};
     var ch = { id: id };
-    ['grade', 'promoDate', 'exam', 'active'].forEach(function (f) {
+    ['grade', 'promoDate', 'exam', 'active', 'tags'].forEach(function (f) {
       if (touched[f]) ch[f] = draft[f];
     });
     var bows = {};
