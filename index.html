@@ -383,6 +383,9 @@
     font-size:11px;color:var(--ink-soft);border:1px solid var(--line);
     border-radius:4px;padding:0 5px;margin-left:6px;font-weight:400;white-space:nowrap;
   }
+  /* 一串標籤。.multi 本身有 margin-left，排成行嗰陣第一粒要收返。 */
+  .tag-row{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+  .tag-row .multi{margin-left:0}
 
   /* 搜尋 + 篩選 */
   .search{margin-bottom:9px}
@@ -726,7 +729,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v40';
+var APP_VERSION = 'v41';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -2905,7 +2908,8 @@ function memberListPanel() {
       '<div class="meta">' + (esc(cur.grade) || '—') +
       (cur.promoDate ? ' · ' + esc(cur.promoDate) : '') +
       ' · 弓 ' + cur.bows.filter(function (b) { return b.color || b.mei || b.kg; }).length +
-      '／箭筒 ' + cur.quivers.filter(function (x) { return x; }).length + '</div></div>' +
+      '／箭筒 ' + cur.quivers.filter(function (x) { return x; }).length + '</div>' +
+      (d.canViewTag ? tagPills(cur.tags) : '') + '</div>' +
       '<span class="caret' + (open ? ' up' : '') + '" onclick="toggleMemberRow(\'' + esc(m.id) + '\')">⌄</span>';
     if (open) h += memberEditor(m, cur, d);
     h += '</div>';
@@ -3017,6 +3021,15 @@ function memberEditor(m, cur, d) {
   });
   h += '</div>';
 
+  /* 標籤：睇同改係兩個唔同權限 —— 副組長睇到但改唔到，導師連睇都唔應該睇到。
+     所以唔可以沿用上面個 ro（佢跟緊級位權限，導師改得級位）。 */
+  if (d.canViewTag) {
+    h += '<div class="rota-no" style="margin-top:14px">標籤</div>';
+    h += (cur.tags && cur.tags.length)
+      ? tagPills(cur.tags)
+      : '<p class="svc-hint">未有標籤</p>';
+  }
+
   /* 活躍 */
   if (d.canEditActive) {
     h += '<label class="svc-item" style="margin-top:12px">' +
@@ -3026,6 +3039,14 @@ function memberEditor(m, cur, d) {
   }
   if (ro) h += '<p class="svc-hint">你冇權限編輯呢啲資料</p>';
   return h + '</div>';
+}
+
+/* 一串標籤 pill。cur.tags 有可能係 undefined（冇權限睇嗰陣後端唔會出呢個欄）。 */
+function tagPills(tags) {
+  if (!tags || !tags.length) return '';
+  return '<div class="tag-row">' + tags.map(function (t) {
+    return '<span class="multi">#' + esc(t) + '</span>';
+  }).join('') + '</div>';
 }
 
 /* ---------- 批量登記升段結果 ---------- */
