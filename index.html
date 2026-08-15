@@ -732,7 +732,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v43';
+var APP_VERSION = 'v44';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -3046,7 +3046,9 @@ function memberEditor(m, cur, d) {
       h += '</div>';
 
       h += '<div class="edit-row" style="margin-top:8px">' +
-        '<input style="flex:1" id="newTag_' + esc(m.id) + '" maxlength="12" placeholder="新標籤（例：週三班）" ' +
+        /* maxlength 放寬到 18：真正嘅 12 字上限係喺 normTagUi_ 剝走 #／=／逗號
+           之後先計，寫死 12 喺呢度會令打得出嘅字仲少過 12 個。 */
+        '<input style="flex:1" id="newTag_' + esc(m.id) + '" maxlength="18" placeholder="新標籤（例：週三班）" ' +
         'onkeydown="if(event.key===\'Enter\'){event.preventDefault();addMemberTag(\'' + esc(m.id) + '\')}">' +
         '<button class="ghost" style="flex:0 0 76px" onclick="addMemberTag(\'' + esc(m.id) + '\')">＋ 加</button>' +
         '</div>';
@@ -3300,15 +3302,27 @@ function toggleMemberTag(id, tag) {
   markTouched(id, 'tags');
   renderStats();
 }
-/** 自由輸入一個新標籤。剝走頭嘅 # 同逗號 —— 逗號係分隔符，
- *  留喺入面下次讀返出嚟會裂做兩個標籤。後端一樣會再洗一次。 */
+/**
+ * 同後端 normTag_ 一模一樣嘅次序：剝 # → 剝逗號 → 收窄空白 → 剝公式字元 → 最後先截長度。
+ * ⚠️ 次序好緊要。如果喺剝走開頭嘅 = 之前就截，個 = 會白白食咗一個字位，
+ *    例如「=IMPORTXML(1)」會變成「IMPORTXML(1」，尾個括號無端端唔見咗。
+ * 逗號一定要剝：佢係分隔符，留喺入面下次讀返出嚟會裂做兩個標籤，冇得還原。
+ */
+function normTagUi_(s) {
+  var t = String(s == null ? '' : s).trim();
+  t = t.replace(/^#+/, '').replace(/,/g, '');
+  t = t.replace(/\s+/g, ' ').trim();
+  t = t.replace(/^[=+\-@]+/, '').trim();
+  return t.slice(0, 12);
+}
+
+/** 自由輸入一個新標籤。後端一樣會再洗一次，呢度只係即時回饋。 */
 function addMemberTag(id) {
   var el = document.getElementById('newTag_' + id);
   if (!el) return;
-  var t = String(el.value || '').trim().replace(/^#+/, '').replace(/,/g, '').trim();
+  var t = normTagUi_(el.value);
   el.value = '';
   if (!t) return;
-  if (t.length > 12) t = t.slice(0, 12);
   var dr = memDraft(id);
   if (dr.tags.indexOf(t) > -1) return toast('已經有呢個標籤');
   if (dr.tags.length >= 8) return toast('一個會員最多 8 個標籤');
