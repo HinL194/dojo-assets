@@ -318,6 +318,14 @@
   }
   .duty .note{font-size:12.5px;color:var(--ink-soft);font-weight:400;margin-top:2px}
 
+  /* ---------- 活動 ---------- */
+  /* .duty 本身已經有左邊界，呢度淨係換色：紅＝要你回覆，綠＝答咗參加 */
+  .card.evt.pending{border-left-color:var(--shu)}
+  .card.evt.going{border-left-color:var(--matsu)}
+  .duty .tag.ok{color:var(--matsu);border-color:var(--matsu)}
+  .rsvp-row{display:flex;gap:8px;margin-top:10px}
+  .rsvp-row button{flex:1}
+
   .empty{
     text-align:center;color:var(--ink-soft);padding:26px 10px;font-size:14px;
     border:1px dashed var(--line);border-radius:var(--radius);
@@ -732,7 +740,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v44';
+var APP_VERSION = 'v45';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -790,7 +798,12 @@ var state = {
   svcFrom: null,        // 'today' | 'stats'
   svcSel: {},           // 保養表單揀咗嘅項目
   rotaEditingId: null,  // 正在編輯邊一行（'__new__' = 新增）
-  builder: null         // 予定組合器狀態
+  builder: null,        // 予定組合器狀態
+  events: null,         // 活動（由後台攞返嚟）
+  eventsLoading: false, // 攞緊 —— 擋住重複叫 API
+  eventOpenId: null,    // 展開緊邊個活動
+  eventRoster: {},      // 各活動嘅回覆名單（null = 攞緊）
+  eventPastOpen: false  // 顯示埋過咗嘅活動
 };
 
 try {
@@ -887,6 +900,14 @@ var I18N = {
     pickResult: '請揀檢查結果', svcSaved: '已記錄保養',
     svcAllDone: '已記錄，本月檢查全部完成 ✓',
 
+    /* 活動 */
+    evtSection: '活動', evtPast: '過往活動',
+    evtJoin: '參加', evtDecline: '唔參加', evtGoing: '已參加',
+    evtNotice: '公告', evtCancelled: '已取消',
+    evtWhen: '日期時間', evtWhere: '地點', evtHost: '負責人',
+    evtFee: '費用', evtDeadline: '回覆截止', evtCap: '人數上限',
+    evtRoster: '睇回覆情況', evtFull: '人數已滿', evtClosed: '已過回覆截止',
+
     /* 公家弓 */
     searchBow: '搜尋編號、品牌…', allTypes: '全部', allKg: '全部弓力',
     noBowFound: '搵唔到符合嘅弓',
@@ -942,6 +963,13 @@ var I18N = {
     svcHint: 'Tap a bow number to log its inspection result',
     pickResult: 'Please select a result', svcSaved: 'Inspection logged',
     svcAllDone: 'Logged — all bows inspected this month ✓',
+
+    evtSection: 'Events', evtPast: 'Past events',
+    evtJoin: 'Going', evtDecline: 'Not going', evtGoing: 'Going',
+    evtNotice: 'Notice', evtCancelled: 'Cancelled',
+    evtWhen: 'Date & time', evtWhere: 'Place', evtHost: 'Organiser',
+    evtFee: 'Fee', evtDeadline: 'Reply by', evtCap: 'Capacity',
+    evtRoster: 'See replies', evtFull: 'Full', evtClosed: 'Replies closed',
 
     searchBow: 'Search number, brand…', allTypes: 'All', allKg: 'All weights',
     noBowFound: 'No matching bows',
@@ -1219,6 +1247,9 @@ function renderToday() {
     if (state.repairFormOpen) h += repairFormCard();
   }
 
+  /* 活動（要登入先見到）*/
+  if (state.auth) h += eventsSection();
+
   /* 公家弓檢查維修卡（有排程未完成先出現；要登入先見到） */
   if (state.auth && d.schedule && !d.schedule.complete) {
     var sch = d.schedule;
@@ -1319,6 +1350,181 @@ function dutyCard(r, i) {
   }
   return h + '</div>';
 }
+/* ---------- 活動 ---------- */
+
+/**
+ * 首頁活動段。
+ * ⚠️ 唔可以用 renderToday 開頭嗰種「掟走成個 main() 出 loading」嘅寫法 ——
+ *    咁會連今日工作都唔見咗。呢度只喺自己呢一段出 loading，其餘照顯示。
+ *    eventsLoading 做 in-flight 標記，擋住每次 render 都再叫多次 API。
+ */
+function eventsSection() {
+  if (!state.events) {
+    if (!state.eventsLoading) {
+      state.eventsLoading = true;
+      call('getEvents', authPayload()).then(function (d) {
+        state.events = d;
+        state.eventsLoading = false;
+        if (state.tab === 'today') renderToday();
+      }).catch(function (e) {
+        state.eventsLoading = false;
+        state.events = { error: e.message, upcoming: [], past: [] };
+        if (state.tab === 'today') renderToday();
+      });
+    }
+    return '<div class="section-label">' + t('evtSection') + '</div><div class="loading">' + t('loading') + '</div>';
+  }
+
+  var d = state.events;
+  if (d.error) {
+    return '<div class="section-label">' + t('evtSection') + '</div>' +
+      '<div class="empty">' + t('loadFail') + esc(d.error) +
+      '<br><br><button class="ghost" onclick="reloadEvents()">' + t('retry') + '</button></div>';
+  }
+
+  var up = d.upcoming || [];
+  if (!up.length && !(d.past || []).length) return '';   // 一個活動都冇就唔佔位
+
+  /* 未回覆排最前 —— 呢啲係要人做嘢嘅 */
+  var pending = up.filter(function (e) { return e.needRsvp && e.invited && !e.myRsvp && e.status === '公開'; });
+  var rest = up.filter(function (e) { return pending.indexOf(e) === -1; });
+
+  var h = '<div class="section-label">' + t('evtSection') +
+    (pending.length ? ' <span class="cnt2">' + pending.length + '</span>' : '') + '</div>';
+
+  pending.forEach(function (e) { h += eventCard(e); });
+  rest.forEach(function (e) { h += eventCard(e); });
+
+  if ((d.past || []).length) {
+    h += '<details class="rota"' + (state.eventPastOpen ? ' open' : '') +
+      ' ontoggle="state.eventPastOpen=this.open"><summary>' + t('evtPast') +
+      ' <span class="cnt2">' + d.past.length + '</span></summary>';
+    d.past.forEach(function (e) { h += eventCard(e); });
+    h += '</details>';
+  }
+  return h;
+}
+
+function eventCard(e) {
+  var open = state.eventOpenId === e.id;
+  var going = e.myRsvp === '參加';
+  var pending = e.needRsvp && e.invited && !e.myRsvp && e.status === '公開';
+  var cls = 'card duty evt' + (pending ? ' pending' : '') + (going ? ' going' : '');
+
+  var when = (e.date ? esc(dmy_(e.date)) : '') + (e.time ? ' ' + esc(e.time) : '');
+  var sub = [when, e.place ? esc(e.place) : ''].filter(function (x) { return x; }).join('　·　');
+
+  var pill = '';
+  if (e.status === '取消') pill = '<span class="tag">' + t('evtCancelled') + '</span>';
+  else if (e.status === '草稿') pill = '<span class="tag">草稿</span>';
+  else if (!e.needRsvp) pill = '<span class="tag">' + t('evtNotice') + '</span>';
+  else if (going) pill = '<span class="tag ok">' + t('evtGoing') + '</span>';
+  else if (e.myRsvp) pill = '<span class="tag">' + t('evtDecline') + '</span>';
+
+  var h = '<div class="' + cls + '">' +
+    '<div class="duty-top tap" onclick="toggleEvent(\'' + esc(e.id) + '\')">' +
+    '<div class="duty-name">' + esc(e.name) +
+    (sub ? '<div class="note">' + sub + '</div>' : '') + '</div>' +
+    pill +
+    (e.link ? '<a class="linkbtn" href="' + esc(e.link) + '" target="_blank" rel="noopener" ' +
+      'onclick="event.stopPropagation()">開啟 ↗</a>' : '') +
+    '<span class="caret' + (open ? ' up' : '') + '">⌄</span>' +
+    '</div>';
+
+  if (open) {
+    h += '<div class="duty-more">';
+    if (e.detail) h += '<div class="note" style="margin-bottom:8px">' + esc(e.detail) + '</div>';
+    h += '<div class="kv">';
+    if (e.date) h += '<div class="k">' + t('evtWhen') + '</div><div class="v">' + esc(dmy_(e.date)) + (e.time ? ' ' + esc(e.time) : '') + '</div>';
+    if (e.place) h += '<div class="k">' + t('evtWhere') + '</div><div class="v">' + esc(e.place) + '</div>';
+    if (e.host) h += '<div class="k">' + t('evtHost') + '</div><div class="v">' + esc(e.host) + '</div>';
+    if (e.fee) h += '<div class="k">' + t('evtFee') + '</div><div class="v">' + esc(e.fee) + '</div>';
+    if (e.deadline) h += '<div class="k">' + t('evtDeadline') + '</div><div class="v">' + esc(dmy_(e.deadline)) + '</div>';
+    if (e.cap) h += '<div class="k">' + t('evtCap') + '</div><div class="v">' + e.cap + '</div>';
+    if (e.needRsvp) h += '<div class="k">' + t('evtGoing') + '</div><div class="v">' + e.yes + (e.cap ? ' / ' + e.cap : '') + '　·　' + t('evtDecline') + ' ' + e.no + '</div>';
+    h += '</div>';
+
+    if (e.needRsvp && e.status === '公開') {
+      var closed = e.deadline && e.deadline < (state.events.today || '');
+      var full = e.cap > 0 && e.yes >= e.cap && !going;
+      if (!e.invited) {
+        h += '<p class="svc-hint">你唔喺呢個活動嘅邀請名單，睇得但唔使回覆。</p>';
+      } else if (closed) {
+        h += '<p class="svc-hint">' + t('evtClosed') + '（' + esc(dmy_(e.deadline)) + '）</p>';
+      } else {
+        h += '<div class="rsvp-row">' +
+          '<button class="' + (going ? 'primary' : 'ghost') + '" ' +
+          'onclick="doRsvp(\'' + esc(e.id) + '\',\'參加\')"' + (full ? ' disabled' : '') + '>' +
+          (going ? '✓ ' : '') + t('evtJoin') + '</button>' +
+          '<button class="' + (e.myRsvp === '唔參加' ? 'primary' : 'ghost') + '" ' +
+          'onclick="doRsvp(\'' + esc(e.id) + '\',\'唔參加\')">' +
+          (e.myRsvp === '唔參加' ? '✓ ' : '') + t('evtDecline') + '</button></div>';
+        if (full) h += '<p class="svc-hint">' + t('evtFull') + '</p>';
+      }
+      h += eventRosterHtml_(e.id);
+    }
+    h += '</div>';
+  }
+  return h + '</div>';
+}
+
+/** 回覆名單。跟 contribDetailHtml_ 嘅做法：null = 攞緊，擋住重複叫 API。 */
+function eventRosterHtml_(id) {
+  var cache = state.eventRoster;
+  if (!cache.hasOwnProperty(id)) {
+    return '<button class="ghost" style="margin-top:8px" onclick="loadRoster(\'' + esc(id) + '\')">' +
+      t('evtRoster') + '</button>';
+  }
+  var r = cache[id];
+  if (r === null) return '<div class="loading" style="margin-top:8px">' + t('loading') + '</div>';
+  if (!r.ok) return '<p class="svc-hint">' + esc(r.msg) + '</p>';
+
+  var list = function (label, arr) {
+    if (!arr || !arr.length) return '';
+    return '<div class="rota-no" style="margin-top:10px">' + label +
+      ' <span class="cnt2">' + arr.length + '</span></div><div class="tag-row">' +
+      arr.map(function (x) {
+        return '<span class="multi">' + esc(x.name || x.id) +
+          (x.stale ? '（已離開對象）' : '') + '</span>';
+      }).join('') + '</div>';
+  };
+  return '<div style="margin-top:6px">' +
+    list(t('evtJoin'), r.yes) + list(t('evtDecline'), r.no) +
+    (r.pending ? list('未回覆', r.pending) : '') + '</div>';
+}
+
+function toggleEvent(id) {
+  state.eventOpenId = (state.eventOpenId === id) ? null : id;
+  renderToday();
+}
+function reloadEvents() { state.events = null; state.eventRoster = {}; renderToday(); }
+
+function loadRoster(id) {
+  state.eventRoster[id] = null;          // 標記攞緊，唔好再叫多次
+  renderToday();
+  call('getEventRoster', authPayload(), id).then(function (r) {
+    state.eventRoster[id] = r;
+    if (state.tab === 'today') renderToday();
+  }).catch(function (e) {
+    state.eventRoster[id] = { ok: false, msg: e.message };
+    if (state.tab === 'today') renderToday();
+  });
+}
+
+/** 回覆。成功之後用後端回傳嘅數就地更新，唔使成個 getEvents 再攞一次。 */
+function doRsvp(id, ans) {
+  toast('儲存中…');
+  call('saveRsvp', authPayload(), id, ans).then(function (r) {
+    if (!r.ok) return toast(r.msg);
+    (state.events.upcoming || []).concat(state.events.past || []).forEach(function (e) {
+      if (e.id === id) { e.myRsvp = r.myRsvp; e.yes = r.yes; e.no = r.no; }
+    });
+    delete state.eventRoster[id];        // 名單過時咗，下次撳先再攞
+    toast(ans === '參加' ? '已回覆：參加' : '已回覆：唔參加');
+    renderToday();
+  }).catch(function (e) { toast('失敗：' + e.message); });
+}
+
 /* ---------- 保養回報（今日工作卡＋報告頁共用） ---------- */
 function openSvc(bowId, from) {
   state.svcBow = (state.svcBow === bowId) ? null : bowId;
@@ -2083,6 +2289,7 @@ function clearSession_() {
   // 由後台攞返嚟嘅資料
   state.ops = null; state.bow = null; state.memberList = null;
   state.myEquip = null; state.myEquipDraft = null; state.myEquipDirty = false;
+  state.events = null; state.eventsLoading = false; state.eventRoster = {};
 
   // 未儲存草稿
   state.pending = {}; state.memberEdits = {}; state.memberTouched = {}; state.itemEdit = null;
@@ -2102,6 +2309,7 @@ function clearSession_() {
   state.memberOpenId = null; state.examOther = {};
   state.memberShowAll = false; state.addMemberOpen = false;
   state.annText = null;
+  state.eventOpenId = null; state.eventPastOpen = false;
 }
 
 function backFromMe() { state.tab = 'today'; render(); }
