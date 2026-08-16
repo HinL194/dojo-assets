@@ -325,6 +325,16 @@
   .duty .tag.ok{color:var(--matsu);border-color:var(--matsu)}
   .rsvp-row{display:flex;gap:8px;margin-top:10px}
   .rsvp-row button{flex:1}
+  /* 活動詳情：打橫排，唔夠位就成項跳落一行。
+     ⚠️ 唔可以用 .kv —— 佢係 flex 一行一對，塞幾對入同一個就會逼到啲字直住排。 */
+  .evt-kv{
+    display:flex;flex-wrap:wrap;gap:5px 14px;
+    padding:8px 0;margin-bottom:2px;border-bottom:1px solid var(--line);
+  }
+  .evt-kv > div{font-size:13px;white-space:nowrap}
+  .evt-kv .k{color:var(--ink-soft);margin-right:5px}
+  /* 回覆名單：會員編號行頭，同公家弓卡一樣嘅睇法 */
+  .tag-row .multi b{color:var(--ai);font-weight:600;margin-right:4px}
 
   .empty{
     text-align:center;color:var(--ink-soft);padding:26px 10px;font-size:14px;
@@ -740,7 +750,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v46';
+var APP_VERSION = 'v47';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -1444,15 +1454,23 @@ function eventCard(e) {
   if (open) {
     h += '<div class="duty-more">';
     if (e.detail) h += '<div class="note" style="margin-bottom:8px">' + esc(e.detail) + '</div>';
-    h += '<div class="kv">';
-    if (e.date) h += '<div class="k">' + t('evtWhen') + '</div><div class="v">' + esc(dmy_(e.date)) + (e.time ? ' ' + esc(e.time) : '') + '</div>';
-    if (e.place) h += '<div class="k">' + t('evtWhere') + '</div><div class="v">' + esc(e.place) + '</div>';
-    if (e.host) h += '<div class="k">' + t('evtHost') + '</div><div class="v">' + esc(e.host) + '</div>';
-    if (e.fee) h += '<div class="k">' + t('evtFee') + '</div><div class="v">' + esc(e.fee) + '</div>';
-    if (e.deadline) h += '<div class="k">' + t('evtDeadline') + '</div><div class="v">' + esc(dmy_(e.deadline)) + '</div>';
-    if (e.cap) h += '<div class="k">' + t('evtCap') + '</div><div class="v">' + e.cap + '</div>';
-    if (e.needRsvp) h += '<div class="k">' + t('evtGoing') + '</div><div class="v">' + e.yes + (e.cap ? ' / ' + e.cap : '') + '　·　' + t('evtDecline') + ' ' + e.no + '</div>';
-    h += '</div>';
+    var kv = [];
+    var add = function (label, val) {
+      if (val === '' || val == null) return;
+      kv.push('<div><span class="k">' + label + '</span>' + val + '</div>');
+    };
+    if (e.date) add(t('evtWhen'), esc(dmy_(e.date)) + (e.time ? ' ' + esc(e.time) : ''));
+    if (e.place) add(t('evtWhere'), esc(e.place));
+    if (e.host) add(t('evtHost'), esc(e.host));
+    if (e.fee) add(t('evtFee'), esc(e.fee));
+    if (e.deadline) add(t('evtDeadline'), esc(dmy_(e.deadline)));
+    if (e.needRsvp) {
+      add(t('evtGoing'), e.yes + (e.cap ? ' / ' + e.cap : ''));
+      add(t('evtDecline'), String(e.no));
+    } else if (e.cap) {
+      add(t('evtCap'), String(e.cap));
+    }
+    if (kv.length) h += '<div class="evt-kv">' + kv.join('') + '</div>';
 
     if (e.needRsvp && e.status === '公開') {
       var closed = e.deadline && e.deadline < (state.events.today || '');
@@ -1664,7 +1682,9 @@ function eventRosterHtml_(id) {
     return '<div class="rota-no" style="margin-top:10px">' + label +
       ' <span class="cnt2">' + arr.length + '</span></div><div class="tag-row">' +
       arr.map(function (x) {
-        return '<span class="multi">' + esc(x.name || x.id) +
+        /* 編號行頭 —— 同名同姓分得清，亦同公家弓卡「111 楓」一樣嘅睇法 */
+        return '<span class="multi">' +
+          (x.id ? '<b>' + esc(x.id) + '</b>' : '') + esc(x.name || '') +
           (x.stale ? '（已離開對象）' : '') + '</span>';
       }).join('') + '</div>';
   };
