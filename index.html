@@ -740,7 +740,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v45';
+var APP_VERSION = 'v46';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -803,7 +803,9 @@ var state = {
   eventsLoading: false, // 攞緊 —— 擋住重複叫 API
   eventOpenId: null,    // 展開緊邊個活動
   eventRoster: {},      // 各活動嘅回覆名單（null = 攞緊）
-  eventPastOpen: false  // 顯示埋過咗嘅活動
+  eventPastOpen: false, // 顯示埋過咗嘅活動
+  eventEditId: null,    // 編輯緊邊個活動（'__new__' = 新增）
+  evtBuilder: null      // 活動編輯器嘅未儲存草稿
 };
 
 try {
@@ -1383,7 +1385,9 @@ function eventsSection() {
   }
 
   var up = d.upcoming || [];
-  if (!up.length && !(d.past || []).length) return '';   // 一個活動都冇就唔佔位
+  /* 一個活動都冇就唔佔位 —— 但管理層要留返個「新增活動」掣，
+     唔係第一個活動永遠都開唔到。 */
+  if (!up.length && !(d.past || []).length && !d.canEdit) return '';
 
   /* 未回覆排最前 —— 呢啲係要人做嘢嘅 */
   var pending = up.filter(function (e) { return e.needRsvp && e.invited && !e.myRsvp && e.status === '公開'; });
@@ -1391,6 +1395,12 @@ function eventsSection() {
 
   var h = '<div class="section-label">' + t('evtSection') +
     (pending.length ? ' <span class="cnt2">' + pending.length + '</span>' : '') + '</div>';
+
+  if (d.canEdit) {
+    h += '<button class="repairbtn" onclick="openEventEditor(\'__new__\')">＋ 新增活動' +
+      (state.eventEditId === '__new__' ? ' ✕' : '') + '</button>';
+    if (state.eventEditId === '__new__') h += renderEventEditor('__new__');
+  }
 
   pending.forEach(function (e) { h += eventCard(e); });
   rest.forEach(function (e) { h += eventCard(e); });
@@ -1463,9 +1473,179 @@ function eventCard(e) {
       }
       h += eventRosterHtml_(e.id);
     }
+
+    if (state.events.canEdit) {
+      h += '<div class="edit-row" style="margin-top:10px">' +
+        '<button class="ghost" onclick="openEventEditor(\'' + esc(e.id) + '\')">✎ 編輯</button>' +
+        (e.status === '取消'
+          ? '<button class="ghost" onclick="setEvtStatus(\'' + esc(e.id) + '\',\'公開\')">↩ 恢復</button>'
+          : '<button class="danger" onclick="setEvtStatus(\'' + esc(e.id) + '\',\'取消\')">取消活動</button>') +
+        '</div>';
+      if (state.eventEditId === e.id) h += renderEventEditor(e.id);
+    }
     h += '</div>';
   }
   return h + '</div>';
+}
+
+/* ---------- 活動編輯器（副組長以上） ---------- */
+
+/** 開／關編輯器。開嗰陣由活動 clone 一份草稿出嚟。 */
+function openEventEditor(id) {
+  if (state.eventEditId === id) { state.eventEditId = null; state.evtBuilder = null; return renderToday(); }
+  var e = null;
+  if (id !== '__new__') {
+    e = (state.events.upcoming || []).concat(state.events.past || [])
+      .filter(function (x) { return x.id === id; })[0];
+  }
+  state.eventEditId = id;
+  state.evtBuilder = e ? {
+    name: e.name, date: e.date, time: e.time, place: e.place, detail: e.detail,
+    deadline: e.deadline, cap: e.cap || '', fee: e.fee, host: e.host, link: e.link,
+    needRsvp: e.needRsvp, status: e.status,
+    viewRoles: (e.viewRoles || []).slice(), viewTags: (e.viewTags || []).slice(),
+    inviteRoles: (e.inviteRoles || []).slice(), inviteTags: (e.inviteTags || []).slice()
+  } : {
+    name: '', date: '', time: '', place: '', detail: '',
+    deadline: '', cap: '', fee: '', host: '', link: '',
+    needRsvp: true, status: '公開',
+    viewRoles: [], viewTags: [], inviteRoles: [], inviteTags: []
+  };
+  renderToday();
+}
+function closeEventEditor() { state.eventEditId = null; state.evtBuilder = null; renderToday(); }
+
+/**
+ * ⚠️ 每次 re-render 之前一定要行呢個。
+ * 啲 input 係 uncontrolled（值淨係喺 DOM 度），撳一個 toggle 掣就會重畫成段 HTML，
+ * 唔先抽返入 state 嘅話，用戶打咗一半嘅字會即刻消失。rota editor 個 syncEditor() 就係為咗同一件事。
+ */
+function syncEventEditor() {
+  var b = state.evtBuilder;
+  if (!b) return;
+  [['evName', 'name'], ['evDate', 'date'], ['evTime', 'time'], ['evPlace', 'place'],
+   ['evDetail', 'detail'], ['evDeadline', 'deadline'], ['evCap', 'cap'],
+   ['evFee', 'fee'], ['evHost', 'host'], ['evLink', 'link']].forEach(function (p) {
+    var el = document.getElementById(p[0]);
+    if (el) b[p[1]] = el.value;
+  });
+}
+function togEvtRole(kind, role) {
+  syncEventEditor();
+  var arr = state.evtBuilder[kind];
+  var i = arr.indexOf(role);
+  if (i > -1) arr.splice(i, 1); else arr.push(role);
+  renderToday();
+}
+function togEvtTag(kind, tag) {
+  syncEventEditor();
+  var arr = state.evtBuilder[kind];
+  var i = arr.indexOf(tag);
+  if (i > -1) arr.splice(i, 1); else arr.push(tag);
+  renderToday();
+}
+function togEvtRsvp(on) { syncEventEditor(); state.evtBuilder.needRsvp = on; renderToday(); }
+function setEvtStatusDraft(v) { syncEventEditor(); state.evtBuilder.status = v; renderToday(); }
+
+function renderEventEditor(id) {
+  var b = state.evtBuilder;
+  if (!b) return '';
+  var isNew = (id === '__new__');
+  var d = state.events;
+
+  var chips = function (label, kind, isTag, pool) {
+    if (!pool.length) return '';
+    var sel = b[kind];
+    return '<label>' + label + '</label><div class="tag-pick">' +
+      pool.map(function (x) {
+        var on = sel.indexOf(x) > -1;
+        return '<button class="chip-btn' + (on ? ' on' : '') + '" ' +
+          'onclick="togEvt' + (isTag ? 'Tag' : 'Role') + '(\'' + kind + '\',\'' + esc(x) + '\')">' +
+          (on ? '✓ ' : '') + (isTag ? '#' : '') + esc(x) + '</button>';
+      }).join('') + '</div>';
+  };
+
+  var h = '<div class="card ordpanel" style="border-color:var(--ai)" onclick="event.stopPropagation()">' +
+    '<div class="rota-no">' + (isNew ? '新增活動' : '編輯活動') + '</div>' +
+
+    '<label>活動名稱 *</label><input id="evName" maxlength="60" value="' + esc(b.name) + '">' +
+    '<label>日期 *</label><input id="evDate" type="date" value="' + esc(b.date) + '">' +
+    '<label>時間</label><input id="evTime" placeholder="例：14:00-17:00" value="' + esc(b.time) + '">' +
+    '<label>地點</label><input id="evPlace" value="' + esc(b.place) + '">' +
+    '<label>詳情</label><textarea id="evDetail" rows="3">' + esc(b.detail) + '</textarea>' +
+
+    '<label class="svc-item" style="margin-top:12px">' +
+    '<input type="checkbox"' + (b.needRsvp ? ' checked' : '') +
+    ' onchange="togEvtRsvp(this.checked)"><span>要收回覆（唔剔＝純公告）</span></label>';
+
+  if (b.needRsvp) {
+    h += '<label>回覆截止</label><input id="evDeadline" type="date" value="' + esc(b.deadline) + '">' +
+      '<label>人數上限（留空＝冇限）</label>' +
+      '<input id="evCap" type="number" inputmode="numeric" min="0" value="' + esc(b.cap) + '">';
+  }
+
+  h += '<label>費用</label><input id="evFee" placeholder="例：$50" value="' + esc(b.fee) + '">' +
+    '<label>負責人</label><input id="evHost" value="' + esc(b.host) + '">' +
+    '<label>相關連結</label><input id="evLink" placeholder="https://…" value="' + esc(b.link) + '">';
+
+  h += '<div class="rota-no" style="margin-top:16px">邀請對象（會收到邀請、要回覆）</div>' +
+    '<p class="svc-hint">角色同標籤係「或」—— 任何一邊符合就當中。兩個都唔揀＝全館。</p>' +
+    chips('角色', 'inviteRoles', false, d.allRoles || []) +
+    chips('標籤', 'inviteTags', true, d.allTags || []);
+
+  h += '<div class="rota-no" style="margin-top:16px">額外可見對象（睇得到但唔使回覆）</div>' +
+    '<p class="svc-hint">被邀請嘅人一定睇得到，唔使喺呢度再揀一次。</p>' +
+    chips('角色', 'viewRoles', false, d.allRoles || []) +
+    chips('標籤', 'viewTags', true, d.allTags || []);
+
+  /* 對象預覽：唔叫 API，淨係將設定用文字講一次 */
+  var say = function (roles, tags) {
+    if (!roles.length && !tags.length) return '全館';
+    return roles.concat(tags.map(function (x) { return '#' + x; })).join('、');
+  };
+  h += '<div class="chk good" style="margin-top:12px">邀請：' + esc(say(b.inviteRoles, b.inviteTags)) +
+    '<div class="chk-info">可見：' + esc(say(
+      b.viewRoles.concat(b.inviteRoles.filter(function (r) { return b.viewRoles.indexOf(r) === -1; })),
+      b.viewTags.concat(b.inviteTags.filter(function (x) { return b.viewTags.indexOf(x) === -1; }))
+    )) + '</div></div>';
+
+  if (!isNew) {
+    h += '<label style="margin-top:12px">狀態</label><div class="tog">' +
+      ['公開', '草稿', '取消'].map(function (s) {
+        return '<button class="chip-btn' + (b.status === s ? ' on' : '') +
+          '" onclick="setEvtStatusDraft(\'' + s + '\')">' + s + '</button>';
+      }).join('') + '</div>';
+  }
+
+  h += '<div class="edit-row" style="margin-top:14px">' +
+    '<button class="primary" onclick="saveEventEditor(\'' + esc(id) + '\')">儲存</button>' +
+    '<button class="ghost" onclick="closeEventEditor()">取消</button></div>';
+
+  return h + '</div>';
+}
+
+function saveEventEditor(id) {
+  syncEventEditor();
+  var b = state.evtBuilder;
+  if (!String(b.name || '').trim()) return toast('請填活動名稱');
+  if (!String(b.date || '').trim()) return toast('請填日期');
+  toast('儲存中…');
+  call('saveEvent', authPayload(), id, b).then(function (r) {
+    if (!r.ok) return toast(r.msg);
+    toast(id === '__new__' ? '已新增活動' : '已更新活動');
+    state.eventEditId = null; state.evtBuilder = null;
+    reloadEvents();
+  }).catch(function (e) { toast('失敗：' + e.message); });
+}
+
+function setEvtStatus(id, st) {
+  if (st === '取消' && !confirm('確定取消呢個活動？已收到嘅回覆會保留，之後可以恢復。')) return;
+  toast('處理中…');
+  call('setEventStatus', authPayload(), id, st).then(function (r) {
+    if (!r.ok) return toast(r.msg);
+    toast(st === '取消' ? '已取消活動' : '已恢復活動');
+    reloadEvents();
+  }).catch(function (e) { toast('失敗：' + e.message); });
 }
 
 /** 回覆名單。跟 contribDetailHtml_ 嘅做法：null = 攞緊，擋住重複叫 API。 */
@@ -2310,6 +2490,7 @@ function clearSession_() {
   state.memberShowAll = false; state.addMemberOpen = false;
   state.annText = null;
   state.eventOpenId = null; state.eventPastOpen = false;
+  state.eventEditId = null; state.evtBuilder = null;
 }
 
 function backFromMe() { state.tab = 'today'; render(); }
