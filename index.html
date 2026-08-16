@@ -655,6 +655,8 @@
   .act-tag.a-norm{background:#EDF1F7;color:var(--ai)}
   .act-body{flex:1;min-width:0}
   .act-detail{font-size:13.5px;line-height:1.45;word-break:break-word}
+  /* 重複次數（「劉子軒 ×6」）—— 淡啲，唔好搶走個名 */
+  .act-detail .xn{color:var(--ink-soft);font-size:12px;font-variant-numeric:tabular-nums}
   .act-meta{font-size:11.5px;color:var(--ink-soft);margin-top:2px}
   /* 日常紀錄：暗色細字，唔搶眼 */
   .routine{margin-top:14px}
@@ -750,7 +752,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v47';
+var APP_VERSION = 'v48';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -3927,6 +3929,25 @@ function groupActs_(list) {
   return out;
 }
 
+/**
+ * 將重複嘅詳情摺埋。
+ * 「劉子軒、劉子軒、劉子軒、劉子軒、劉子軒、劉子軒」完全冇資訊量，
+ * 改成「劉子軒 ×6」。保持第一次出現嘅次序，唔會打亂。
+ * 全部係空字串（例如「更新自己裝備」唔會寫詳情）就回空，由呼叫者略過成個 div。
+ */
+function dedupeDetails_(items) {
+  var order = [], count = {};
+  (items || []).forEach(function (x) {
+    var s = String(x == null ? '' : x).trim();
+    if (!s) return;
+    if (!count[s]) { count[s] = 0; order.push(s); }
+    count[s]++;
+  });
+  return order.map(function (s) {
+    return esc(s) + (count[s] > 1 ? ' <span class="xn">×' + count[s] + '</span>' : '');
+  }).join('、');
+}
+
 function actFeed(list, dim) {
   var h = '', lastDay = '';
   groupActs_(list).forEach(function (g) {
@@ -3939,11 +3960,12 @@ function actFeed(list, dim) {
     var t1 = String(g.atLast).slice(11, 16), t2 = String(g.at).slice(11, 16);
     var timeTxt = (n > 1 && t1 !== t2) ? (t1 + '–' + t2) : t2;
 
+    var det = dedupeDetails_(g.items);
     h += '<div class="card act' + (dim ? ' dim' : '') + '">' +
       '<span class="act-tag ' + actClass(g.action) + '">' + esc(g.action) + '</span>' +
       '<div class="act-body">' +
       (n > 1 ? '<div class="act-count">' + n + ' 項</div>' : '') +
-      '<div class="act-detail">' + g.items.map(esc).join('、') + '</div>' +
+      (det ? '<div class="act-detail">' + det + '</div>' : '') +
       '<div class="act-meta">' + esc(g.who) + ' · ' + esc(timeTxt) + '</div></div></div>';
   });
   return h;
