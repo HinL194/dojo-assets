@@ -222,6 +222,8 @@
     border-top:2.5px solid transparent;font-weight:500;
   }
   nav button.active{color:var(--ai);border-top-color:var(--ai);font-weight:700}
+  /* 5 個掣（工務組先見到咁多）：收細少少先夠位 */
+  nav.n5 button{font-size:12px;padding:10px 0 8px;min-width:0}
 
   .notice{
     background:#F6F2E4;border:1px solid #D8C99A;border-left:4px solid #B8912D;
@@ -327,6 +329,27 @@
   .duty .tag.cat{font-weight:500}
   .rsvp-row{display:flex;gap:8px;margin-top:10px}
   .rsvp-row button{flex:1}
+
+  /* ---------- 日曆 ---------- */
+  .cal-head{display:flex;align-items:center;gap:10px;margin:10px 0 8px}
+  .cal-head button{flex:0 0 44px;font-size:18px;line-height:1;padding:6px 0}
+  .cal-title{flex:1;text-align:center;font-size:15px;font-weight:600;letter-spacing:.04em}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+  .cal-wd{text-align:center;font-size:11px;color:var(--ink-soft);padding:2px 0 4px}
+  .cal-day{
+    min-height:40px;background:var(--card);border:1px solid var(--line);
+    border-radius:6px;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:3px;font-size:13px;cursor:pointer;
+    font-variant-numeric:tabular-nums;
+  }
+  .cal-day.empty{background:none;border-color:transparent;cursor:default}
+  .cal-day.today{border-color:var(--ai);font-weight:700;color:var(--ai)}
+  .cal-day.sel{background:var(--ai);border-color:var(--ai);color:#fff}
+  /* 有活動嘅日子出彩色點（顏色 = 類別），最多 3 點 */
+  .cal-dots{display:flex;align-items:center;gap:2px;height:6px}
+  .cal-dot{width:5px;height:5px;border-radius:50%;display:block}
+  .cal-more{font-size:9px;color:var(--ink-soft);line-height:1}
+  .cal-day.sel .cal-more{color:#fff}
   /* 活動詳情：打橫排，唔夠位就成項跳落一行。
      ⚠️ 唔可以用 .kv —— 佢係 flex 一行一對，塞幾對入同一個就會逼到啲字直住排。 */
   .evt-kv{
@@ -361,11 +384,15 @@
     width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;
     font-size:15px;font-family:inherit;background:#fff;color:var(--ink);
   }
-  /* iOS Safari 嘅 type="date" 有個老毛病：就算 width:100% 都可能唔理，
-     原生日期揀選器嘅內容將個框撐闊過個卡嘅邊界。
-     ⚠️ 淨係 max-width 攔唔住 —— UA 會按內容（「2026年8月16日」）落一個
-     min-width，而 CSS 入面 min-width 係蓋過 max-width 嘅。要明寫 min-width:0。 */
-  input[type="date"]{max-width:100%;min-width:0}
+  /* iOS Safari 嘅 type="date" 撐闊過張卡。
+     試過 max-width:100% 同 min-width:0 都攔唔住 —— 因為 iOS 個原生日期
+     控件自己帶一套尺寸，width 系列規則根本管唔到佢。
+     一定要先 -webkit-appearance:none 關咗 UA 樣式，之後 width 先生效。
+     關咗之後個框變返普通方框，但撳落去照樣彈原生日期揀選器。 */
+  input[type="date"]{
+    -webkit-appearance:none;appearance:none;
+    width:100%;max-width:100%;min-width:0;
+  }
   input:focus,textarea:focus,select:focus{outline:2px solid var(--ai);border-color:var(--ai)}
   label{font-size:13px;color:var(--ink-soft);display:block;margin:10px 0 4px}
 
@@ -760,7 +787,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v50';
+var APP_VERSION = 'v51';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -827,7 +854,10 @@ var state = {
   eventEditId: null,    // 編輯緊邊個活動（'__new__' = 新增）
   evtBuilder: null,     // 活動編輯器嘅未儲存草稿
   evtCatOpen: false,    // 活動類別設定面板開合
-  evtCatDraft: null     // 類別清單嘅未儲存草稿
+  evtCatDraft: null,    // 類別清單嘅未儲存草稿
+  calMonth: '',         // 日曆睇緊邊個月（yyyy-MM，空 = 本月）
+  calDay: '',           // 日曆揀咗邊日（yyyy-MM-dd，空 = 今日）
+  calCat: ''            // 日曆類別篩選（空 = 全部）
 };
 
 try {
@@ -893,7 +923,8 @@ var I18N = {
   zh: {
     appTitle: '道場工務系統',
     login: '登入', logout: '登出', back: '← 返回',
-    tabToday: '今日工作', tabBow: '公家弓', tabStock: '物資', tabReport: '報告',
+    /* 「今日工作」縮短做「今日」—— 工務組會見到 5 個掣，4 個中文字擺唔落 */
+    tabToday: '今日', tabCal: '日曆', tabBow: '公家弓', tabStock: '物資', tabReport: '報告',
     loading: '載入中', retry: '重試', cancel: '取消', submit: '提交', save: '儲存',
     loadFail: '載入失敗：',
 
@@ -932,6 +963,10 @@ var I18N = {
     evtFee: '費用', evtDeadline: '回覆截止', evtCap: '人數上限',
     evtRoster: '睇回覆情況', evtFull: '人數已滿', evtClosed: '已過回覆截止',
 
+    /* 日曆 */
+    calAll: '全部', calNoEvent: '呢日冇活動',
+    calWd: '日,一,二,三,四,五,六',
+
     /* 公家弓 */
     searchBow: '搜尋編號、品牌…', allTypes: '全部', allKg: '全部弓力',
     noBowFound: '搵唔到符合嘅弓',
@@ -960,7 +995,7 @@ var I18N = {
   en: {
     appTitle: 'Dojo Operations',
     login: 'Log in', logout: 'Log out', back: '← Back',
-    tabToday: 'Today', tabBow: 'Dojo Bows', tabStock: 'Supplies', tabReport: 'Reports',
+    tabToday: 'Today', tabCal: 'Calendar', tabBow: 'Bows', tabStock: 'Supplies', tabReport: 'Reports',
     loading: 'Loading', retry: 'Retry', cancel: 'Cancel', submit: 'Submit', save: 'Save',
     loadFail: 'Failed to load: ',
 
@@ -994,6 +1029,9 @@ var I18N = {
     evtWhen: 'Date & time', evtWhere: 'Place', evtHost: 'Organiser',
     evtFee: 'Fee', evtDeadline: 'Reply by', evtCap: 'Capacity',
     evtRoster: 'See replies', evtFull: 'Full', evtClosed: 'Replies closed',
+
+    calAll: 'All', calNoEvent: 'Nothing on this day',
+    calWd: 'S,M,T,W,T,F,S',
 
     searchBow: 'Search number, brand…', allTypes: 'All', allKg: 'All weights',
     noBowFound: 'No matching bows',
@@ -1143,6 +1181,7 @@ function dimHeader() {
 /* ============ 導覽 ============ */
 var TABS_IN = [
   ['today', 'tabToday',  'member'],
+  ['cal',   'tabCal',    'member'],
   ['bow',   'tabBow',    'member'],
   ['stock', 'tabStock',  'ops'],
   ['stats', 'tabReport', 'report']   // 含導師
@@ -1174,6 +1213,9 @@ function renderNav() {
   // 'me' 冇底部掣，但係合法頁面
   var valid = tabs.some(function (tb) { return tb[0] === state.tab; }) || state.tab === 'me';
   if (!valid) state.tab = 'today';
+  /* 工務組會見到 5 個掣（會員 3 個、導師 4 個）。掣係 flex:1 平分，
+     5 個嗰陣要收細字先夠位。 */
+  nav.className = tabs.length >= 5 ? 'n5' : '';
   nav.innerHTML = tabs.map(function (tb) {
     return '<button data-tab="' + tb[0] + '"' + (tb[0] === state.tab ? ' class="active"' : '') +
       '>' + esc(t(tb[1])) + '</button>';
@@ -1201,6 +1243,7 @@ function render() {
   if (state.tab === 'today') return renderToday();
   if (!state.auth) return renderLogin();
   if (state.tab === 'me') return renderMe();
+  if (state.tab === 'cal') return renderCal();   // ⚠️ 一定要喺下面個 isOps 閘之前
   if (state.tab === 'bow') return renderBow();   // 會員以上都用得
   if (state.tab === 'stats' && isReport()) {     // 導師可以睇報告
     if (!state.ops) return isOps() ? loadOps() : loadReport();
@@ -1440,6 +1483,10 @@ function eventsSection() {
   return h;
 }
 
+/** 活動卡喺首頁同日曆兩處都會出現，所以所有活動 handler 都要 render 返
+ *  當前嗰頁，唔可以寫死 renderToday —— 唔係喺日曆撳一下就會彈返首頁。 */
+function renderEvtView() { if (state.tab === 'cal') renderCal(); else renderToday(); }
+
 /* 類別顏色：類別數量係可變嘅（館長改得），所以唔可以寫死 CSS token。
    改為按類別喺清單入面嘅次序循環用呢個調色盤。
    朱色（--shu）排最後，因為佢喺其他地方代表警告，唔想第一個類別就撞。 */
@@ -1545,7 +1592,7 @@ function eventCard(e) {
 
 /** 開／關編輯器。開嗰陣由活動 clone 一份草稿出嚟。 */
 function openEventEditor(id) {
-  if (state.eventEditId === id) { state.eventEditId = null; state.evtBuilder = null; return renderToday(); }
+  if (state.eventEditId === id) { state.eventEditId = null; state.evtBuilder = null; return renderEvtView(); }
   var e = null;
   if (id !== '__new__') {
     e = (state.events.upcoming || []).concat(state.events.past || [])
@@ -1565,9 +1612,9 @@ function openEventEditor(id) {
     needRsvp: true, status: '公開',
     viewRoles: [], viewTags: [], inviteRoles: [], inviteTags: []
   };
-  renderToday();
+  renderEvtView();
 }
-function closeEventEditor() { state.eventEditId = null; state.evtBuilder = null; renderToday(); }
+function closeEventEditor() { state.eventEditId = null; state.evtBuilder = null; renderEvtView(); }
 
 /**
  * ⚠️ 每次 re-render 之前一定要行呢個。
@@ -1589,23 +1636,23 @@ function togEvtRole(kind, role) {
   var arr = state.evtBuilder[kind];
   var i = arr.indexOf(role);
   if (i > -1) arr.splice(i, 1); else arr.push(role);
-  renderToday();
+  renderEvtView();
 }
 function togEvtTag(kind, tag) {
   syncEventEditor();
   var arr = state.evtBuilder[kind];
   var i = arr.indexOf(tag);
   if (i > -1) arr.splice(i, 1); else arr.push(tag);
-  renderToday();
+  renderEvtView();
 }
-function togEvtRsvp(on) { syncEventEditor(); state.evtBuilder.needRsvp = on; renderToday(); }
+function togEvtRsvp(on) { syncEventEditor(); state.evtBuilder.needRsvp = on; renderEvtView(); }
 /** 類別係單選。再撳一次已揀嗰個就清走（容許未分類）。 */
 function setEvtCat(v) {
   syncEventEditor();
   state.evtBuilder.cat = (state.evtBuilder.cat === v) ? '' : v;
-  renderToday();
+  renderEvtView();
 }
-function setEvtStatusDraft(v) { syncEventEditor(); state.evtBuilder.status = v; renderToday(); }
+function setEvtStatusDraft(v) { syncEventEditor(); state.evtBuilder.status = v; renderEvtView(); }
 
 function renderEventEditor(id) {
   var b = state.evtBuilder;
@@ -1748,19 +1795,144 @@ function eventRosterHtml_(id) {
 
 function toggleEvent(id) {
   state.eventOpenId = (state.eventOpenId === id) ? null : id;
-  renderToday();
+  renderEvtView();
 }
-function reloadEvents() { state.events = null; state.eventRoster = {}; renderToday(); }
+function reloadEvents() {
+  state.events = null; state.eventRoster = {};
+  if (state.tab === 'cal') renderCal(); else renderToday();
+}
+
+/* ---------- 日曆 ---------- */
+
+/** 'yyyy-MM' → {y, m}（m 係 1-12） */
+function calYM_() {
+  var p = String(state.calMonth || '').split('-');
+  if (p.length !== 2) {
+    var t0 = (state.events && state.events.today) || '';
+    p = t0 ? t0.slice(0, 7).split('-') : [String(new Date().getFullYear()), String(new Date().getMonth() + 1)];
+  }
+  return { y: Number(p[0]), m: Number(p[1]) };
+}
+function calShift(n) {
+  var ym = calYM_();
+  var d = new Date(ym.y, ym.m - 1 + n, 1);
+  state.calMonth = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+  renderCal();
+}
+function calPick(day) { state.calDay = day; renderCal(); }
+function calFilter(c) { state.calCat = c; renderCal(); }
+
+/** 所有睇得到嘅活動，已套用類別篩選 */
+function calEvents_() {
+  var d = state.events || {};
+  var all = (d.upcoming || []).concat(d.past || []);
+  if (!state.calCat) return all;
+  return all.filter(function (e) { return e.cat === state.calCat; });
+}
+
+function renderCal() {
+  if (!state.events) {
+    if (!state.eventsLoading) {
+      state.eventsLoading = true;
+      call('getEvents', authPayload()).then(function (d) {
+        state.events = d; state.eventsLoading = false;
+        if (state.tab === 'cal') renderCal();
+      }).catch(function (e) {
+        state.eventsLoading = false;
+        state.events = { error: e.message, upcoming: [], past: [] };
+        if (state.tab === 'cal') renderCal();
+      });
+    }
+    main().innerHTML = '<div class="loading">' + t('loading') + '</div>';
+    return;
+  }
+
+  var d = state.events;
+  if (d.error) {
+    main().innerHTML = '<div class="empty">' + t('loadFail') + esc(d.error) +
+      '<br><br><button class="ghost" onclick="reloadEvents()">' + t('retry') + '</button></div>';
+    return;
+  }
+
+  var today = d.today || '';
+  if (!state.calMonth) state.calMonth = today.slice(0, 7);
+  if (!state.calDay) state.calDay = today;
+
+  var ym = calYM_();
+  var list = calEvents_();
+
+  /* 一個月一次過分好組，好過每格都掃一次成個清單 */
+  var byDay = {};
+  list.forEach(function (e) {
+    if (!e.date) return;
+    (byDay[e.date] = byDay[e.date] || []).push(e);
+  });
+
+  var h = '';
+
+  /* 類別篩選 */
+  if ((d.allCats || []).length) {
+    h += '<div class="chips">' +
+      '<button class="chip-btn' + (!state.calCat ? ' on' : '') + '" onclick="calFilter(\'\')">' +
+      t('calAll') + '</button>' +
+      d.allCats.map(function (c) {
+        var on = state.calCat === c;
+        var css = on ? 'background:' + catColor(c) + ';border-color:' + catColor(c)
+                     : 'color:' + catColor(c) + ';border-color:' + catColor(c);
+        return '<button class="chip-btn' + (on ? ' on' : '') + '" style="' + css + '" ' +
+          'onclick="calFilter(\'' + esc(c) + '\')">' + esc(c) + '</button>';
+      }).join('') + '</div>';
+  }
+
+  /* 月份標題 + 前後掣 */
+  h += '<div class="cal-head">' +
+    '<button class="ghost" onclick="calShift(-1)">‹</button>' +
+    '<div class="cal-title">' + ym.y + ' 年 ' + ym.m + ' 月</div>' +
+    '<button class="ghost" onclick="calShift(1)">›</button></div>';
+
+  /* 格仔 */
+  var wd = t('calWd').split(',');
+  h += '<div class="cal-grid">' + wd.map(function (w) {
+    return '<div class="cal-wd">' + esc(w) + '</div>';
+  }).join('');
+
+  var first = new Date(ym.y, ym.m - 1, 1).getDay();      // 0 = 星期日
+  var days = new Date(ym.y, ym.m, 0).getDate();
+  for (var i = 0; i < first; i++) h += '<div class="cal-day empty"></div>';
+  for (var dd = 1; dd <= days; dd++) {
+    var key = ym.y + '-' + ('0' + ym.m).slice(-2) + '-' + ('0' + dd).slice(-2);
+    var evs = byDay[key] || [];
+    var cls = 'cal-day' + (key === today ? ' today' : '') + (key === state.calDay ? ' sel' : '');
+    h += '<div class="' + cls + '" onclick="calPick(\'' + key + '\')">' +
+      '<div>' + dd + '</div><div class="cal-dots">' +
+      evs.slice(0, 3).map(function (e) {
+        return '<span class="cal-dot" style="background:' + catColor(e.cat) + '"></span>';
+      }).join('') +
+      (evs.length > 3 ? '<span class="cal-more">+</span>' : '') +
+      '</div></div>';
+  }
+  h += '</div>';
+
+  /* 揀咗嗰日 */
+  var sel = byDay[state.calDay] || [];
+  h += '<div class="section-label">' + esc(dmy_(state.calDay)) +
+    (sel.length ? ' <span class="cnt2">' + sel.length + '</span>' : '') + '</div>';
+  if (!sel.length) h += '<div class="empty">' + t('calNoEvent') + '</div>';
+  else sel.forEach(function (e) { h += eventCard(e); });
+
+  h += '<div class="ver">' + APP_VERSION + '</div>';
+  main().innerHTML = h;
+}
 
 function loadRoster(id) {
   state.eventRoster[id] = null;          // 標記攞緊，唔好再叫多次
-  renderToday();
+  renderEvtView();
   call('getEventRoster', authPayload(), id).then(function (r) {
     state.eventRoster[id] = r;
-    if (state.tab === 'today') renderToday();
+    if (state.tab === 'today') renderEvtView();
   }).catch(function (e) {
     state.eventRoster[id] = { ok: false, msg: e.message };
-    if (state.tab === 'today') renderToday();
+    if (state.tab === 'today') renderEvtView();
   });
 }
 
@@ -1774,7 +1946,7 @@ function doRsvp(id, ans) {
     });
     delete state.eventRoster[id];        // 名單過時咗，下次撳先再攞
     toast(ans === '參加' ? '已回覆：參加' : '已回覆：唔參加');
-    renderToday();
+    renderEvtView();
   }).catch(function (e) { toast('失敗：' + e.message); });
 }
 
@@ -2565,6 +2737,7 @@ function clearSession_() {
   state.eventOpenId = null; state.eventPastOpen = false;
   state.eventEditId = null; state.evtBuilder = null;
   state.evtCatOpen = false; state.evtCatDraft = null;
+  state.calMonth = ''; state.calDay = ''; state.calCat = '';
 }
 
 function backFromMe() { state.tab = 'today'; render(); }
@@ -2819,11 +2992,11 @@ function openCatEdit() {
   if (state.evtCatOpen) return closeCatEdit();
   state.evtCatDraft = ((state.events && state.events.allCats) || []).slice();
   state.evtCatOpen = true;
-  renderToday();
+  renderEvtView();
 }
 function closeCatEdit() {
   state.evtCatOpen = false; state.evtCatDraft = null;
-  renderToday();
+  renderEvtView();
 }
 function evtCatPanel() {
   var a = state.evtCatDraft || [];
@@ -2843,8 +3016,8 @@ function evtCatPanel() {
     '<button class="ghost" onclick="closeCatEdit()">取消</button></div></div>';
 }
 function editEvtCat(i, v) { state.evtCatDraft[i] = v; }
-function addEvtCat() { state.evtCatDraft.push(''); renderToday(); }
-function delEvtCat(i) { state.evtCatDraft.splice(i, 1); renderToday(); }
+function addEvtCat() { state.evtCatDraft.push(''); renderEvtView(); }
+function delEvtCat(i) { state.evtCatDraft.splice(i, 1); renderEvtView(); }
 function saveEvtCats() {
   var list = (state.evtCatDraft || []).filter(function (x) { return String(x).trim(); });
   if (!list.length) return toast('至少要留一個類別');
