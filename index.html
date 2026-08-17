@@ -323,6 +323,8 @@
   .card.evt.pending{border-left-color:var(--shu)}
   .card.evt.going{border-left-color:var(--matsu)}
   .duty .tag.ok{color:var(--matsu);border-color:var(--matsu)}
+  /* 類別 pill 嘅顏色由 JS 落 inline style（類別數量可變，寫死唔到） */
+  .duty .tag.cat{font-weight:500}
   .rsvp-row{display:flex;gap:8px;margin-top:10px}
   .rsvp-row button{flex:1}
   /* 活動詳情：打橫排，唔夠位就成項跳落一行。
@@ -752,7 +754,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v48';
+var APP_VERSION = 'v49';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -817,7 +819,9 @@ var state = {
   eventRoster: {},      // 各活動嘅回覆名單（null = 攞緊）
   eventPastOpen: false, // 顯示埋過咗嘅活動
   eventEditId: null,    // 編輯緊邊個活動（'__new__' = 新增）
-  evtBuilder: null      // 活動編輯器嘅未儲存草稿
+  evtBuilder: null,     // 活動編輯器嘅未儲存草稿
+  evtCatOpen: false,    // 活動類別設定面板開合
+  evtCatDraft: null     // 類別清單嘅未儲存草稿
 };
 
 try {
@@ -1412,6 +1416,9 @@ function eventsSection() {
     h += '<button class="repairbtn" onclick="openEventEditor(\'__new__\')">＋ 新增活動' +
       (state.eventEditId === '__new__' ? ' ✕' : '') + '</button>';
     if (state.eventEditId === '__new__') h += renderEventEditor('__new__');
+    h += '<button class="repairbtn" onclick="openCatEdit()">✎ 編輯活動類別' +
+      (state.evtCatOpen ? ' ✕' : '') + '</button>';
+    if (state.evtCatOpen) h += evtCatPanel();
   }
 
   pending.forEach(function (e) { h += eventCard(e); });
@@ -1427,6 +1434,24 @@ function eventsSection() {
   return h;
 }
 
+/* 類別顏色：類別數量係可變嘅（館長改得），所以唔可以寫死 CSS token。
+   改為按類別喺清單入面嘅次序循環用呢個調色盤。
+   朱色（--shu）排最後，因為佢喺其他地方代表警告，唔想第一個類別就撞。 */
+var CAT_COLORS = ['#27476E', '#49714F', '#B8912D', '#6B5B8E', '#B8432D', '#6E675B'];
+
+function catColor(cat) {
+  var all = (state.events && state.events.allCats) || [];
+  var i = all.indexOf(cat);
+  if (i < 0) return '#6E675B';        // 唔喺現行清單（例如館長刪走咗）就用中性色
+  return CAT_COLORS[i % CAT_COLORS.length];
+}
+
+function catPill(cat) {
+  if (!cat) return '';
+  var c = catColor(cat);
+  return '<span class="tag cat" style="color:' + c + ';border-color:' + c + '">' + esc(cat) + '</span>';
+}
+
 function eventCard(e) {
   var open = state.eventOpenId === e.id;
   var going = e.myRsvp === '參加';
@@ -1436,6 +1461,7 @@ function eventCard(e) {
   var when = (e.date ? esc(dmy_(e.date)) : '') + (e.time ? ' ' + esc(e.time) : '');
   var sub = [when, e.place ? esc(e.place) : ''].filter(function (x) { return x; }).join('　·　');
 
+  /* 類別同狀態係兩粒獨立嘅 pill，可以同時出現 */
   var pill = '';
   if (e.status === '取消') pill = '<span class="tag">' + t('evtCancelled') + '</span>';
   else if (e.status === '草稿') pill = '<span class="tag">草稿</span>';
@@ -1447,6 +1473,7 @@ function eventCard(e) {
     '<div class="duty-top tap" onclick="toggleEvent(\'' + esc(e.id) + '\')">' +
     '<div class="duty-name">' + esc(e.name) +
     (sub ? '<div class="note">' + sub + '</div>' : '') + '</div>' +
+    catPill(e.cat) +
     pill +
     (e.link ? '<a class="linkbtn" href="' + esc(e.link) + '" target="_blank" rel="noopener" ' +
       'onclick="event.stopPropagation()">開啟 ↗</a>' : '') +
@@ -1519,14 +1546,15 @@ function openEventEditor(id) {
       .filter(function (x) { return x.id === id; })[0];
   }
   state.eventEditId = id;
+  /* ⚠️ 兩個分支要一齊改 —— 新欄位漏咗其中一邊就會變 undefined */
   state.evtBuilder = e ? {
-    name: e.name, date: e.date, time: e.time, place: e.place, detail: e.detail,
+    name: e.name, cat: e.cat || '', date: e.date, time: e.time, place: e.place, detail: e.detail,
     deadline: e.deadline, cap: e.cap || '', fee: e.fee, host: e.host, link: e.link,
     needRsvp: e.needRsvp, status: e.status,
     viewRoles: (e.viewRoles || []).slice(), viewTags: (e.viewTags || []).slice(),
     inviteRoles: (e.inviteRoles || []).slice(), inviteTags: (e.inviteTags || []).slice()
   } : {
-    name: '', date: '', time: '', place: '', detail: '',
+    name: '', cat: '', date: '', time: '', place: '', detail: '',
     deadline: '', cap: '', fee: '', host: '', link: '',
     needRsvp: true, status: '公開',
     viewRoles: [], viewTags: [], inviteRoles: [], inviteTags: []
@@ -1565,6 +1593,12 @@ function togEvtTag(kind, tag) {
   renderToday();
 }
 function togEvtRsvp(on) { syncEventEditor(); state.evtBuilder.needRsvp = on; renderToday(); }
+/** 類別係單選。再撳一次已揀嗰個就清走（容許未分類）。 */
+function setEvtCat(v) {
+  syncEventEditor();
+  state.evtBuilder.cat = (state.evtBuilder.cat === v) ? '' : v;
+  renderToday();
+}
 function setEvtStatusDraft(v) { syncEventEditor(); state.evtBuilder.status = v; renderToday(); }
 
 function renderEventEditor(id) {
@@ -1589,6 +1623,13 @@ function renderEventEditor(id) {
     '<div class="rota-no">' + (isNew ? '新增活動' : '編輯活動') + '</div>' +
 
     '<label>活動名稱 *</label><input id="evName" maxlength="60" value="' + esc(b.name) + '">' +
+    '<label>類別</label><div class="tag-pick">' +
+    (d.allCats || []).map(function (c) {
+      var on = b.cat === c;
+      return '<button class="chip-btn' + (on ? ' on' : '') + '" ' +
+        (on ? 'style="border-color:' + catColor(c) + ';color:' + catColor(c) + '" ' : '') +
+        'onclick="setEvtCat(\'' + esc(c) + '\')">' + (on ? '✓ ' : '') + esc(c) + '</button>';
+    }).join('') + '</div>' +
     '<label>日期 *</label><input id="evDate" type="date" value="' + esc(b.date) + '">' +
     '<label>時間</label><input id="evTime" placeholder="例：14:00-17:00" value="' + esc(b.time) + '">' +
     '<label>地點</label><input id="evPlace" value="' + esc(b.place) + '">' +
@@ -2513,6 +2554,7 @@ function clearSession_() {
   state.annText = null;
   state.eventOpenId = null; state.eventPastOpen = false;
   state.eventEditId = null; state.evtBuilder = null;
+  state.evtCatOpen = false; state.evtCatDraft = null;
 }
 
 function backFromMe() { state.tab = 'today'; render(); }
@@ -2758,6 +2800,50 @@ function saveReasons() {
     toast('已儲存');
     state.reasonOpen = false; state.reasonDraft = null; state.bow = null;
     renderBow();
+  }).catch(function (e) { toast('失敗：' + e.message); });
+}
+
+/* ---------- 活動類別設定（副組長以上）---------- */
+/* 跟借用原因同一套做法。入口喺首頁活動段，因為改完即刻見到效果。 */
+function openCatEdit() {
+  if (state.evtCatOpen) return closeCatEdit();
+  state.evtCatDraft = ((state.events && state.events.allCats) || []).slice();
+  state.evtCatOpen = true;
+  renderToday();
+}
+function closeCatEdit() {
+  state.evtCatOpen = false; state.evtCatDraft = null;
+  renderToday();
+}
+function evtCatPanel() {
+  var a = state.evtCatDraft || [];
+  return '<div class="card ordpanel">' +
+    '<div class="rota-no">活動類別</div>' +
+    a.map(function (c, i) {
+      return '<div class="ord-row">' +
+        '<input maxlength="12" value="' + esc(c) + '" oninput="editEvtCat(' + i + ',this.value)">' +
+        '<button onclick="delEvtCat(' + i + ')" title="刪除">✕</button></div>';
+    }).join('') +
+    '<div class="edit-row" style="margin-top:10px">' +
+    '<button class="ghost" onclick="addEvtCat()">＋ 加一項</button></div>' +
+    '<p class="svc-hint">刪走一個類別唔會影響已經用緊佢嘅活動 —— 嗰啲照顯示返舊名，' +
+    '只係下次編輯嗰個活動嗰陣要重新揀過。</p>' +
+    '<div class="edit-row" style="margin-top:8px">' +
+    '<button class="primary" onclick="saveEvtCats()">儲存</button>' +
+    '<button class="ghost" onclick="closeCatEdit()">取消</button></div></div>';
+}
+function editEvtCat(i, v) { state.evtCatDraft[i] = v; }
+function addEvtCat() { state.evtCatDraft.push(''); renderToday(); }
+function delEvtCat(i) { state.evtCatDraft.splice(i, 1); renderToday(); }
+function saveEvtCats() {
+  var list = (state.evtCatDraft || []).filter(function (x) { return String(x).trim(); });
+  if (!list.length) return toast('至少要留一個類別');
+  toast('儲存中…');
+  call('updateEventCats', authPayload(), list).then(function (r) {
+    if (!r.ok) return toast(r.msg);
+    toast('已儲存');
+    state.evtCatOpen = false; state.evtCatDraft = null;
+    reloadEvents();   // allCats 喺 getEvents 個 payload 度，要重攞
   }).catch(function (e) { toast('失敗：' + e.message); });
 }
 
