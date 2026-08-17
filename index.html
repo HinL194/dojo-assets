@@ -362,8 +362,10 @@
     font-size:15px;font-family:inherit;background:#fff;color:var(--ink);
   }
   /* iOS Safari 嘅 type="date" 有個老毛病：就算 width:100% 都可能唔理，
-     原生日期揀選器嘅內容將個框撐闊過個卡嘅邊界。加返 max-width 兜住。 */
-  input[type="date"]{max-width:100%}
+     原生日期揀選器嘅內容將個框撐闊過個卡嘅邊界。
+     ⚠️ 淨係 max-width 攔唔住 —— UA 會按內容（「2026年8月16日」）落一個
+     min-width，而 CSS 入面 min-width 係蓋過 max-width 嘅。要明寫 min-width:0。 */
+  input[type="date"]{max-width:100%;min-width:0}
   input:focus,textarea:focus,select:focus{outline:2px solid var(--ai);border-color:var(--ai)}
   label{font-size:13px;color:var(--ink-soft);display:block;margin:10px 0 4px}
 
@@ -409,6 +411,10 @@
   /* 標籤揀選：同 .chips 唔同，呢度要換行唔要橫向捲，因為標籤數量會慢慢多 */
   .tag-pick{display:flex;flex-wrap:wrap;gap:6px}
   .tag-pick .chip-btn{flex:0 0 auto}
+  /* ⚠️ 活動編輯器係喺展開咗嘅活動卡（.duty-more）入面 render，而嗰度有條
+     `.duty-more button{width:100%}`，會將所有 chip 逼成一粒一行。
+     呢條規則特異性較高（0,2,0 > 0,1,1），搶返嚟。 */
+  .duty-more .chip-btn{width:auto}
 
   /* 搜尋 + 篩選 */
   .search{margin-bottom:9px}
@@ -754,7 +760,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v49';
+var APP_VERSION = 'v50';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -1626,8 +1632,12 @@ function renderEventEditor(id) {
     '<label>類別</label><div class="tag-pick">' +
     (d.allCats || []).map(function (c) {
       var on = b.cat === c;
-      return '<button class="chip-btn' + (on ? ' on' : '') + '" ' +
-        (on ? 'style="border-color:' + catColor(c) + ';color:' + catColor(c) + '" ' : '') +
+      /* 揀咗嗰粒：類別色做底，白字由 .chip-btn.on 出（唔可以喺呢度落 color，
+         唔係就變咗深色字落深色底，睇唔到）。未揀嗰粒：類別色做字同邊框。 */
+      var css = on
+        ? 'background:' + catColor(c) + ';border-color:' + catColor(c)
+        : 'color:' + catColor(c) + ';border-color:' + catColor(c);
+      return '<button class="chip-btn' + (on ? ' on' : '') + '" style="' + css + '" ' +
         'onclick="setEvtCat(\'' + esc(c) + '\')">' + (on ? '✓ ' : '') + esc(c) + '</button>';
     }).join('') + '</div>' +
     '<label>日期 *</label><input id="evDate" type="date" value="' + esc(b.date) + '">' +
