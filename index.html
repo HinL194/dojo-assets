@@ -372,6 +372,20 @@
   /* 回覆名單：會員編號行頭，同公家弓卡一樣嘅睇法 */
   .tag-row .multi b{color:var(--ai);font-weight:600;margin-right:4px}
 
+  /* ----- 記錄出席 -----
+     ⚠️ 呢度啲 selector 一定要贏到上面嘅 `.duty-more button{width:100%}`
+        同 `input{width:100%}`（面板係喺展開咗嘅活動卡入面畫），所以寫足
+        `.att-add button.ghost`，唔好靠同分嘅 specificity 撞彩。 */
+  .att-quick{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 4px}
+  .att-row{display:flex;align-items:center;gap:12px;padding:7px 0;border-bottom:1px solid var(--line)}
+  .att-row .nm{flex:1;min-width:0;font-size:13.5px}
+  .att-row .nm b{color:var(--ai);font-weight:600;margin-right:5px}
+  .att-row .note2{color:var(--ink-soft);font-size:11px;margin-left:6px}
+  .att-row label{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--ink-soft);cursor:pointer}
+  .att-row input{width:auto;margin:0}
+  .att-add input{flex:1;min-width:0}
+  .att-add button.ghost{flex:0 0 62px;width:auto}
+
   .empty{
     text-align:center;color:var(--ink-soft);padding:26px 10px;font-size:14px;
     border:1px dashed var(--line);border-radius:var(--radius);
@@ -798,7 +812,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v54';
+var APP_VERSION = 'v55';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -866,6 +880,8 @@ var state = {
   evtBuilder: null,     // 活動編輯器嘅未儲存草稿
   evtCatOpen: false,    // 活動類別設定面板開合
   evtCatDraft: null,    // 類別清單嘅未儲存草稿
+  attPanelId: null,     // 開緊邊個活動嘅記錄出席面板
+  attDraft: null,       // {att:{編號:true}, cre:{…}, extra:[編號]} 未儲存草稿
   calMonth: '',         // 日曆睇緊邊個月（yyyy-MM，空 = 本月）
   calDay: '',           // 日曆揀咗邊日（yyyy-MM-dd，空 = 今日）
   calCat: ''            // 日曆類別篩選（空 = 全部）
@@ -1576,6 +1592,10 @@ function eventCard(e) {
     } else if (e.cap) {
       add(t('evtCap'), String(e.cap));
     }
+    /* 貢獻狀況淨係畀管理層睇 —— 會員睇到「邊個記咗功」只會生事 */
+    if (state.events.canEdit && e.countsContrib) {
+      add('貢獻', (e.credited || []).length + ' 人 × ' + e.points + ' 分');
+    }
     if (kv.length) h += '<div class="evt-kv">' + kv.join('') + '</div>';
 
     if (e.needRsvp && e.status === '公開') {
@@ -1609,8 +1629,11 @@ function eventCard(e) {
         (e.status === '取消'
           ? '<button class="ghost" onclick="setEvtStatus(\'' + esc(e.id) + '\',\'公開\')">↩ 恢復</button>'
           : '<button class="danger" onclick="setEvtStatus(\'' + esc(e.id) + '\',\'取消\')">取消活動</button>') +
-        '</div>';
+        '</div>' +
+        '<button class="ghost" style="margin-top:8px" onclick="openAttPanel(\'' + esc(e.id) + '\')">' +
+        '📋 記錄出席</button>';
       if (state.eventEditId === e.id) h += renderEventEditor(e.id);
+      if (state.attPanelId === e.id) h += attPanelHtml_(e.id);
     }
     h += '</div>';
   }
@@ -1633,12 +1656,14 @@ function openEventEditor(id) {
     name: e.name, cat: e.cat || '', date: e.date, time: e.time, place: e.place, detail: e.detail,
     deadline: e.deadline, cap: e.cap || '', fee: e.fee, host: e.host, link: e.link,
     needRsvp: e.needRsvp, status: e.status,
+    countsContrib: !!e.countsContrib, points: e.points || 1,
     viewRoles: (e.viewRoles || []).slice(), viewTags: (e.viewTags || []).slice(),
     inviteRoles: (e.inviteRoles || []).slice(), inviteTags: (e.inviteTags || []).slice()
   } : {
     name: '', cat: '', date: '', time: '', place: '', detail: '',
     deadline: '', cap: '', fee: '', host: '', link: '',
     needRsvp: true, status: '公開',
+    countsContrib: false, points: 1,       // 預設唔計貢獻，要逐個活動開
     viewRoles: [], viewTags: [], inviteRoles: [], inviteTags: []
   };
   renderEvtView();
@@ -1655,7 +1680,8 @@ function syncEventEditor() {
   if (!b) return;
   [['evName', 'name'], ['evDate', 'date'], ['evTime', 'time'], ['evPlace', 'place'],
    ['evDetail', 'detail'], ['evDeadline', 'deadline'], ['evCap', 'cap'],
-   ['evFee', 'fee'], ['evHost', 'host'], ['evLink', 'link']].forEach(function (p) {
+   ['evFee', 'fee'], ['evHost', 'host'], ['evLink', 'link'],
+   ['evPoints', 'points']].forEach(function (p) {
     var el = document.getElementById(p[0]);
     if (el) b[p[1]] = el.value;
   });
@@ -1675,6 +1701,7 @@ function togEvtTag(kind, tag) {
   renderEvtView();
 }
 function togEvtRsvp(on) { syncEventEditor(); state.evtBuilder.needRsvp = on; renderEvtView(); }
+function togEvtContrib(on) { syncEventEditor(); state.evtBuilder.countsContrib = on; renderEvtView(); }
 /** 類別係單選。再撳一次已揀嗰個就清走（容許未分類）。 */
 function setEvtCat(v) {
   syncEventEditor();
@@ -1756,6 +1783,18 @@ function renderEventEditor(id) {
       b.viewTags.concat(b.inviteTags.filter(function (x) { return b.viewTags.indexOf(x) === -1; }))
     )) + '</div></div>';
 
+  /* 貢獻：預設唔計 —— 分數會靜靜哋通脹，所以要逐個活動自己開。
+     邊個記功唔喺呢度填，係事後喺「📋 記錄出席」剔。 */
+  h += '<div class="rota-no" style="margin-top:16px">貢獻</div>' +
+    '<label class="svc-item"><input type="checkbox"' + (b.countsContrib ? ' checked' : '') +
+    ' onchange="togEvtContrib(this.checked)"><span>呢個活動計入貢獻</span></label>';
+  if (b.countsContrib) {
+    h += '<label>每人分數（1-20）</label>' +
+      '<input id="evPoints" type="number" inputmode="numeric" min="1" max="20" value="' +
+      esc(b.points) + '">' +
+      '<p class="svc-hint">儲存之後，喺活動卡撳「📋 記錄出席」剔邊個記功。冇剔人＝冇人加分。</p>';
+  }
+
   if (!isNew) {
     h += '<label style="margin-top:12px">狀態</label><div class="tog">' +
       ['公開', '草稿', '取消'].map(function (s) {
@@ -1820,6 +1859,172 @@ function eventRosterHtml_(id) {
   return '<div style="margin-top:6px">' +
     list(t('evtJoin'), r.yes) + list(t('evtDecline'), r.no) +
     (r.pending ? list('未回覆', r.pending) : '') + '</div>';
+}
+
+/* ---------- 記錄出席（副組長以上） ----------
+ * 出席同記功兩個名單分開：道場活動可以「20 人到咗，但只有 3 個幫手」。
+ * 唔強制「記功 ⊆ 出席」—— 有人幫手籌備但當日冇到，一樣要記得功。
+ */
+
+/** 由 upcoming/past 兩堆入面搵返一個活動 */
+function evtById_(id) {
+  var d = state.events || {};
+  return (d.upcoming || []).concat(d.past || [])
+    .filter(function (x) { return x.id === id; })[0] || null;
+}
+
+function openAttPanel(id) {
+  if (state.attPanelId === id) { state.attPanelId = null; state.attDraft = null; return renderEvtView(); }
+  var e = evtById_(id);
+  var att = {}, cre = {};
+  ((e && e.attended) || []).forEach(function (m) { att[m] = true; });
+  ((e && e.credited) || []).forEach(function (m) { cre[m] = true; });
+  state.attPanelId = id;
+  state.attDraft = { att: att, cre: cre, extra: [] };
+  /* 名單同活動係兩個 API —— 開面板嗰陣順手攞埋，loadRoster 自己會重畫 */
+  if (!state.eventRoster.hasOwnProperty(id)) return loadRoster(id);
+  renderEvtView();
+}
+function closeAttPanel() { state.attPanelId = null; state.attDraft = null; renderEvtView(); }
+
+/** 面板要列邊啲人：邀請名單 + 已經剔咗嘅人 + 手動加入嘅人 */
+function attRows_(id) {
+  var r = state.eventRoster[id];
+  var d = state.attDraft || { att: {}, cre: {}, extra: [] };
+  var seen = {}, rows = [];
+  var push = function (mid, name, note) {
+    mid = String(mid == null ? '' : mid).trim();
+    if (!mid || seen[mid]) return;
+    seen[mid] = true;
+    rows.push({ id: mid, name: name || '', note: note || '' });
+  };
+  if (r && r.ok) {
+    (r.yes || []).forEach(function (x) { push(x.id, x.name, t('evtJoin')); });
+    (r.no || []).forEach(function (x) { push(x.id, x.name, t('evtDecline')); });
+    (r.pending || []).forEach(function (x) { push(x.id, x.name, '未回覆'); });
+  }
+  /* 已經剔咗但唔喺邀請名單入面嘅（手動加、或者之後被拎走咗標籤）一定要出返，
+     唔係就會靜靜哋剔唔返轉頭，個人永遠攞住嗰幾分。 */
+  Object.keys(d.att).forEach(function (m) { if (d.att[m]) push(m, '', '名單以外'); });
+  Object.keys(d.cre).forEach(function (m) { if (d.cre[m]) push(m, '', '名單以外'); });
+  (d.extra || []).forEach(function (m) { push(m, '', '名單以外'); });
+  return rows;
+}
+
+/* 撳一格 checkbox 就會重畫成頁，所以要先摷起「加名單以外嘅人」格入面
+   打咗一半嘅字 —— 同 syncEventEditor / svcToggle 一樣嘅理由。 */
+function attSync_() {
+  var el = document.getElementById('attAdd');
+  if (el && state.attDraft) state.attDraft.addVal = el.value;
+}
+function attToggle(mid, kind, on) {
+  var d = state.attDraft;
+  if (!d) return;
+  attSync_();
+  var bag = (kind === 'cre') ? d.cre : d.att;
+  if (on) bag[mid] = true; else delete bag[mid];
+  renderEvtView();
+}
+function attAllPresent(id) {
+  attSync_();
+  var d = state.attDraft;
+  attRows_(id).forEach(function (x) { d.att[x.id] = true; });
+  renderEvtView();
+}
+function attCreditEqPresent() {
+  attSync_();
+  var d = state.attDraft;
+  d.cre = {};
+  Object.keys(d.att).forEach(function (m) { if (d.att[m]) d.cre[m] = true; });
+  renderEvtView();
+}
+function attClear() {
+  attSync_();
+  state.attDraft.att = {}; state.attDraft.cre = {};
+  renderEvtView();
+}
+/** 邀請名單以外嘅人（例如順手幫咗手嘅會員）用會員編號加入 */
+function attAddId() {
+  var el = document.getElementById('attAdd');
+  if (!el) return;
+  var mid = String(el.value || '').trim();
+  state.attDraft.addVal = '';
+  if (!mid) return;
+  if (state.attDraft.extra.indexOf(mid) === -1) state.attDraft.extra.push(mid);
+  renderEvtView();
+}
+
+function attPanelHtml_(id) {
+  var d = state.attDraft;
+  if (!d) return '';
+  var h = '<div class="card ordpanel" style="border-color:var(--ai)" onclick="event.stopPropagation()">' +
+    '<div class="rota-no">記錄出席</div>';
+
+  if (!state.eventRoster.hasOwnProperty(id) || state.eventRoster[id] === null) {
+    return h + '<div class="loading">' + t('loading') + '</div></div>';
+  }
+  var r = state.eventRoster[id];
+  if (r && !r.ok) h += '<p class="svc-hint">名單攞唔到：' + esc(r.msg) + '</p>';
+
+  var e = evtById_(id);
+  h += '<p class="svc-hint">「出席」＝當日真係到咗；「記功」＝計入貢獻分數。' +
+    (e && e.countsContrib
+      ? '呢個活動每人 <b>' + e.points + '</b> 分。'
+      : '⚠️ 呢個活動而家<b>唔計貢獻</b>，剔咗記功都唔會加分 —— 要喺「✎ 編輯」入面開。') +
+    '</p>';
+
+  var rows = attRows_(id);
+  if (!rows.length) {
+    h += '<div class="empty">冇人喺呢個活動嘅名單入面</div>';
+  } else {
+    h += '<div class="att-quick">' +
+      '<button class="chip-btn" onclick="attAllPresent(\'' + esc(id) + '\')">全部到咗</button>' +
+      '<button class="chip-btn" onclick="attCreditEqPresent()">記功＝出席</button>' +
+      '<button class="chip-btn" onclick="attClear()">全部清走</button></div>';
+    h += rows.map(function (x) {
+      var a = !!d.att[x.id], c = !!d.cre[x.id];
+      return '<div class="att-row">' +
+        '<span class="nm"><b>' + esc(x.id) + '</b>' + esc(x.name) +
+        (x.note ? '<span class="note2">' + esc(x.note) + '</span>' : '') + '</span>' +
+        '<label><input type="checkbox"' + (a ? ' checked' : '') +
+        ' onchange="attToggle(\'' + esc(x.id) + '\',\'att\',this.checked)">出席</label>' +
+        '<label><input type="checkbox"' + (c ? ' checked' : '') +
+        ' onchange="attToggle(\'' + esc(x.id) + '\',\'cre\',this.checked)">記功</label></div>';
+    }).join('');
+  }
+
+  h += '<label style="margin-top:12px">加名單以外嘅人（會員編號）</label>' +
+    '<div class="edit-row att-add"><input id="attAdd" placeholder="例：194" value="' +
+    esc(d.addVal || '') + '">' +
+    '<button class="ghost" onclick="attAddId()">加</button></div>';
+
+  h += '<div class="edit-row" style="margin-top:14px">' +
+    '<button class="primary" onclick="saveAttendance(\'' + esc(id) + '\')">儲存</button>' +
+    '<button class="ghost" onclick="closeAttPanel()">取消</button></div>';
+  return h + '</div>';
+}
+
+function saveAttendance(id) {
+  var d = state.attDraft;
+  if (!d) return;
+  var pick = function (bag) {
+    return Object.keys(bag).filter(function (k) { return bag[k]; });
+  };
+  var att = pick(d.att), cre = pick(d.cre);
+  toast('儲存中…');
+  call('saveEventAttendance', authPayload(), id, att, cre).then(function (res) {
+    if (!res.ok) return toast(res.msg);
+    var e = evtById_(id);
+    if (e) { e.attended = res.attended; e.credited = res.credited; }
+    var lost = (att.length - res.attended.length) + (cre.length - res.credited.length);
+    state.attPanelId = null; state.attDraft = null;
+    /* 貢獻榜由另一份 cache 計，剔完唔重攞就會對唔上 */
+    state.contribDetail = {};
+    toast(lost > 0
+      ? '已記錄（有 ' + lost + ' 個編號搵唔到，冇加到）'
+      : '已記錄：出席 ' + res.attended.length + ' 人／記功 ' + res.credited.length + ' 人');
+    renderEvtView();
+  }).catch(function (err) { toast('失敗：' + err.message); });
 }
 
 function toggleEvent(id) {
@@ -2833,6 +3038,7 @@ function clearSession_() {
   state.eventOpenId = null; state.eventPastOpen = false;
   state.eventEditId = null; state.evtBuilder = null;
   state.evtCatOpen = false; state.evtCatDraft = null;
+  state.attPanelId = null; state.attDraft = null;
   state.calMonth = ''; state.calDay = ''; state.calCat = '';
 }
 
@@ -4167,10 +4373,22 @@ function contribDetailHtml_(id) {
   } else if (d.error) {
     h += '<p class="svc-hint">載入失敗：' + esc(d.error) + '</p>';
   } else {
-    h += '<div class="rota-no">組成</div>';
+    h += '<div class="rota-no">工務動作（每件 1 分）</div>';
     h += d.breakdown.length ? d.breakdown.map(function (b) {
       return '<div class="kv"><span class="k">' + esc(b.action) + '</span><b>' + b.count + ' 次</b></div>';
     }).join('') : '<div class="empty">未有紀錄</div>';
+    /* 活動貢獻獨立一段 —— 佢係加權分數，同上面「做過幾多次」唔同單位，
+       溝埋一齊列會令人以為搞一次活動 = 做咗 3 件事。 */
+    var evs = d.events || [];
+    if (evs.length) {
+      var evTotal = evs.reduce(function (s, x) { return s + x.points; }, 0);
+      h += '<div class="rota-no" style="margin-top:12px">活動記功 ' +
+        '<span class="cnt2">共 ' + evTotal + ' 分</span></div>';
+      h += evs.map(function (x) {
+        return '<div class="kv"><span class="k">' + esc(dmy_(x.date)) + '　' + esc(x.name) +
+          '</span><b>' + x.points + ' 分</b></div>';
+      }).join('');
+    }
     h += '<div class="rota-no" style="margin-top:12px">最近 10 次</div>';
     h += d.recent.length ? d.recent.map(function (r) {
       return '<div class="act-meta" style="margin-bottom:6px">' + esc(String(r.at).slice(0, 16)) +
@@ -4448,7 +4666,9 @@ function renderStats() {
   if (d.canViewContributions) {
     /* 貢獻排行有 5 分鐘 cache（見 Code.gs getContributions_），
        所以俾個掣即場重新計，唔使等佢自然過期。 */
-    h += '<div class="section-label">組員貢獻（近 90 日動作次數）' +
+    /* 標題唔可以再寫「動作次數」—— 加咗活動加權分數之後就唔係次數。
+       一件工務動作 = 1 分，一個活動 = 佢自己 set 嗰個分數。 */
+    h += '<div class="section-label">組員貢獻（近 90 日分數）' +
       '<button class="contrib-refresh" onclick="doRefreshContrib(this)">↻ 更新</button></div>';
     var contribs = d.contributions || [];
     if (!contribs.length) {
