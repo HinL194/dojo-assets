@@ -331,9 +331,18 @@
   .rsvp-row button{flex:1}
 
   /* ---------- 日曆 ---------- */
-  .cal-head{display:flex;align-items:center;gap:10px;margin:10px 0 8px}
-  .cal-head button{flex:0 0 44px;font-size:18px;line-height:1;padding:6px 0}
-  .cal-title{flex:1;text-align:center;font-size:15px;font-weight:600;letter-spacing:.04em}
+  .cal-head{display:flex;align-items:center;gap:8px;margin:10px 0 8px}
+  /* ⚠️ 一定要寫足 `button.ghost` —— 淨係寫 `.cal-head button` 嘅 specificity
+     係 (0,1,1)，同上面 `button.ghost` 打和，而 button.ghost 排喺後面就會反
+     過嚟贏，前後揀月個掣會縮返做 13.5px 細字，喺手機上面細到撳唔中。 */
+  .cal-head button.ghost{
+    flex:0 0 auto;min-width:64px;font-size:14px;line-height:1.2;
+    padding:11px 8px;color:var(--ink);
+  }
+  .cal-title{
+    flex:1;text-align:center;font-size:15px;font-weight:600;letter-spacing:.04em;
+    padding:6px 0;cursor:pointer;
+  }
   .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
   .cal-wd{text-align:center;font-size:11px;color:var(--ink-soft);padding:2px 0 4px}
   .cal-day{
@@ -787,7 +796,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v51';
+var APP_VERSION = 'v52';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -962,6 +971,7 @@ var I18N = {
     evtWhen: '日期時間', evtWhere: '地點', evtHost: '負責人',
     evtFee: '費用', evtDeadline: '回覆截止', evtCap: '人數上限',
     evtRoster: '睇回覆情況', evtFull: '人數已滿', evtClosed: '已過回覆截止',
+    evtOver: '活動已經過咗，回覆改唔到；要更正請搵組長',
 
     /* 日曆 */
     calAll: '全部', calNoEvent: '呢日冇活動',
@@ -1029,6 +1039,7 @@ var I18N = {
     evtWhen: 'Date & time', evtWhere: 'Place', evtHost: 'Organiser',
     evtFee: 'Fee', evtDeadline: 'Reply by', evtCap: 'Capacity',
     evtRoster: 'See replies', evtFull: 'Full', evtClosed: 'Replies closed',
+    evtOver: 'This event has passed — replies are locked. Ask a leader to correct it.',
 
     calAll: 'All', calNoEvent: 'Nothing on this day',
     calWd: 'S,M,T,W,T,F,S',
@@ -1555,10 +1566,15 @@ function eventCard(e) {
     if (kv.length) h += '<div class="evt-kv">' + kv.join('') + '</div>';
 
     if (e.needRsvp && e.status === '公開') {
+      /* 過咗嘅活動一律唔畀改回覆（後端 saveRsvp 都有同一個閘）——
+         事後「邊個真係到咗」係組長剔嘅記錄，唔係當事人自己改回覆。 */
+      var over = e.date && e.date < (state.events.today || '');
       var closed = e.deadline && e.deadline < (state.events.today || '');
       var full = e.cap > 0 && e.yes >= e.cap && !going;
       if (!e.invited) {
         h += '<p class="svc-hint">你唔喺呢個活動嘅邀請名單，睇得但唔使回覆。</p>';
+      } else if (over) {
+        h += '<p class="svc-hint">' + t('evtOver') + '</p>';
       } else if (closed) {
         h += '<p class="svc-hint">' + t('evtClosed') + '（' + esc(dmy_(e.deadline)) + '）</p>';
       } else {
@@ -1816,11 +1832,38 @@ function calYM_() {
 function calShift(n) {
   var ym = calYM_();
   var d = new Date(ym.y, ym.m - 1 + n, 1);
-  state.calMonth = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+  var mo = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+  state.calMonth = mo;
+  /* 揀咗嗰日要跟住轉月 —— 唔係嘅話格仔換咗做上個月，下面張詳情卡仲係
+     停喺原本嗰日，睇落好似成個月曆都冇郁過。回到當月就跳返今日。 */
+  var today = (state.events && state.events.today) || '';
+  state.calDay = (today.slice(0, 7) === mo) ? today : mo + '-01';
   renderCal();
 }
 function calPick(day) { state.calDay = day; renderCal(); }
 function calFilter(c) { state.calCat = c; renderCal(); }
+
+var EN_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** 前／後 n 個月嘅短名，寫喺揀月掣上面 */
+function calMonLabel_(n) {
+  var ym = calYM_();
+  var d = new Date(ym.y, ym.m - 1 + n, 1);
+  return state.lang === 'en' ? EN_MON[d.getMonth()] : (d.getMonth() + 1) + '月';
+}
+function calTitle_(ym) {
+  return state.lang === 'en'
+    ? EN_MON[ym.m - 1] + ' ' + ym.y
+    : ym.y + ' 年 ' + ym.m + ' 月';
+}
+/** 撳月份標題跳返今個月／今日 */
+function calToday() {
+  var today = (state.events && state.events.today) || '';
+  if (!today) return;
+  state.calMonth = today.slice(0, 7);
+  state.calDay = today;
+  renderCal();
+}
 
 /** 所有睇得到嘅活動，已套用類別篩選 */
 function calEvents_() {
@@ -1885,10 +1928,12 @@ function renderCal() {
   }
 
   /* 月份標題 + 前後掣 */
+  /* 掣上面直接寫住前後嗰個月份 —— 淨係得個 ‹ › 箭嘴喺手機上面太細，
+     睇唔出撳得，亦都撳唔中（用戶回報「撳 ‹ 完全冇反應」）。 */
   h += '<div class="cal-head">' +
-    '<button class="ghost" onclick="calShift(-1)">‹</button>' +
-    '<div class="cal-title">' + ym.y + ' 年 ' + ym.m + ' 月</div>' +
-    '<button class="ghost" onclick="calShift(1)">›</button></div>';
+    '<button class="ghost" onclick="calShift(-1)">‹ ' + calMonLabel_(-1) + '</button>' +
+    '<div class="cal-title" onclick="calToday()">' + calTitle_(ym) + '</div>' +
+    '<button class="ghost" onclick="calShift(1)">' + calMonLabel_(1) + ' ›</button></div>';
 
   /* 格仔 */
   var wd = t('calWd').split(',');
