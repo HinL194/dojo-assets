@@ -796,7 +796,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v52';
+var APP_VERSION = 'v53';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -1443,11 +1443,11 @@ function eventsSection() {
       call('getEvents', authPayload()).then(function (d) {
         state.events = d;
         state.eventsLoading = false;
-        if (state.tab === 'today') renderToday();
+        renderIfEvtView_();
       }).catch(function (e) {
         state.eventsLoading = false;
         state.events = { error: e.message, upcoming: [], past: [] };
-        if (state.tab === 'today') renderToday();
+        renderIfEvtView_();
       });
     }
     return '<div class="section-label">' + t('evtSection') + '</div><div class="loading">' + t('loading') + '</div>';
@@ -1497,6 +1497,17 @@ function eventsSection() {
 /** 活動卡喺首頁同日曆兩處都會出現，所以所有活動 handler 都要 render 返
  *  當前嗰頁，唔可以寫死 renderToday —— 唔係喺日曆撳一下就會彈返首頁。 */
 function renderEvtView() { if (state.tab === 'cal') renderCal(); else renderToday(); }
+
+/**
+ * API 返嚟之後重畫活動畫面。
+ * ⚠️ 一定要兩個 tab 都認 —— 之前呢啲 callback 淨係寫 `if (state.tab === 'today')`，
+ *    喺日曆頁撳「查看回覆狀況」個「載入中」就會一直轉，要撳去第二頁再返嚟
+ *    先出到嚟（資料其實一早到咗，純粹冇人叫重畫）。
+ * 揀走咗去公家弓／物資嗰啲頁就唔好重畫，唔係會掟走緊睇緊嗰版。
+ */
+function renderIfEvtView_() {
+  if (state.tab === 'today' || state.tab === 'cal') renderEvtView();
+}
 
 /* 類別顏色：類別數量係可變嘅（館長改得），所以唔可以寫死 CSS token。
    改為按類別喺清單入面嘅次序循環用呢個調色盤。
@@ -1879,11 +1890,11 @@ function renderCal() {
       state.eventsLoading = true;
       call('getEvents', authPayload()).then(function (d) {
         state.events = d; state.eventsLoading = false;
-        if (state.tab === 'cal') renderCal();
+        renderIfEvtView_();
       }).catch(function (e) {
         state.eventsLoading = false;
         state.events = { error: e.message, upcoming: [], past: [] };
-        if (state.tab === 'cal') renderCal();
+        renderIfEvtView_();
       });
     }
     main().innerHTML = '<div class="loading">' + t('loading') + '</div>';
@@ -1974,10 +1985,10 @@ function loadRoster(id) {
   renderEvtView();
   call('getEventRoster', authPayload(), id).then(function (r) {
     state.eventRoster[id] = r;
-    if (state.tab === 'today') renderEvtView();
+    renderIfEvtView_();
   }).catch(function (e) {
     state.eventRoster[id] = { ok: false, msg: e.message };
-    if (state.tab === 'today') renderEvtView();
+    renderIfEvtView_();
   });
 }
 
