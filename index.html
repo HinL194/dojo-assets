@@ -339,6 +339,8 @@
     flex:0 0 auto;min-width:64px;font-size:14px;line-height:1.2;
     padding:11px 8px;color:var(--ink);
   }
+  /* 去到有活動嘅頭／尾，粒掣照留返個位（唔想版面跳），但淡曬撳唔郁 */
+  .cal-head button.ghost[disabled]{opacity:.28;cursor:default}
   .cal-title{
     flex:1;text-align:center;font-size:15px;font-weight:600;letter-spacing:.04em;
     padding:6px 0;cursor:pointer;
@@ -796,7 +798,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v53';
+var APP_VERSION = 'v54';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -1840,27 +1842,53 @@ function calYM_() {
   }
   return { y: Number(p[0]), m: Number(p[1]) };
 }
-function calShift(n) {
+/** 由睇緊嗰個月推前／後 n 個月，回傳 'yyyy-MM' */
+function calMonAdd_(n) {
   var ym = calYM_();
   var d = new Date(ym.y, ym.m - 1 + n, 1);
-  var mo = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+  return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+}
+
+/**
+ * 月曆揀得到嘅月份範圍：由最早同最遲嘅活動決定，最少包住今個月。
+ * 冇呢個限制就可以一路㩒去 2026-06、2025-11… 全部空白，白行。
+ * ⚠️ 要用「全部活動」計，唔可以用篩選後嘅 —— 唔係㩒住「工作類」個範圍
+ *    會縮，跟住揀返「全部」又彈返出嚟，睇落好似隨機。
+ */
+function calRange_() {
+  var d = state.events || {};
+  var today = (d.today || '').slice(0, 7);
+  var min = today, max = today;
+  (d.upcoming || []).concat(d.past || []).forEach(function (e) {
+    if (!e.date) return;
+    var mo = e.date.slice(0, 7);
+    if (!min || mo < min) min = mo;
+    if (!max || mo > max) max = mo;
+  });
+  /* 將來嗰邊畀多一個月「望位」：舊月份冇活動就永遠都唔會有，但下個月
+     隨時會加，唔畀人望入去會以為粒掣壞咗。過去嗰邊唔畀 slack。 */
+  var p = max.split('-');
+  var nx = new Date(Number(p[0]), Number(p[1]), 1);      // Number(p[1]) 已經係「下個月」嘅 index
+  max = nx.getFullYear() + '-' + ('0' + (nx.getMonth() + 1)).slice(-2);
+  return { min: min, max: max };
+}
+
+function calShift(n) {
+  var mo = calMonAdd_(n);
+  var r = calRange_();
+  if (mo < r.min || mo > r.max) return;      // 出界就唔郁（粒掣本身都 disabled 咗）
   state.calMonth = mo;
-  /* 揀咗嗰日要跟住轉月 —— 唔係嘅話格仔換咗做上個月，下面張詳情卡仲係
-     停喺原本嗰日，睇落好似成個月曆都冇郁過。回到當月就跳返今日。 */
-  var today = (state.events && state.events.today) || '';
-  state.calDay = (today.slice(0, 7) === mo) ? today : mo + '-01';
-  renderCal();
+  renderCal();                                // 揀咗嗰日由 renderCal 夾返入呢個月
 }
 function calPick(day) { state.calDay = day; renderCal(); }
 function calFilter(c) { state.calCat = c; renderCal(); }
 
 var EN_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/** 前／後 n 個月嘅短名，寫喺揀月掣上面 */
-function calMonLabel_(n) {
-  var ym = calYM_();
-  var d = new Date(ym.y, ym.m - 1 + n, 1);
-  return state.lang === 'en' ? EN_MON[d.getMonth()] : (d.getMonth() + 1) + '月';
+/** 'yyyy-MM' → 「7月」／「Jul」，寫喺揀月掣上面 */
+function calMonLabel_(mo) {
+  var m = Number(String(mo).split('-')[1]);
+  return state.lang === 'en' ? EN_MON[m - 1] : m + '月';
 }
 function calTitle_(ym) {
   return state.lang === 'en'
@@ -1910,7 +1938,15 @@ function renderCal() {
 
   var today = d.today || '';
   if (!state.calMonth) state.calMonth = today.slice(0, 7);
-  if (!state.calDay) state.calDay = today;
+  /* 夾返入有活動嘅範圍（活動可能删咗、或者上次揀嘅月份而家已經出界） */
+  var range = calRange_();
+  if (state.calMonth < range.min) state.calMonth = range.min;
+  if (state.calMonth > range.max) state.calMonth = range.max;
+  /* 揀咗嗰日一定要喺睇緊嗰個月入面 —— 唔係轉咗月，下面張詳情卡仲停喺
+     原本嗰日，睇落好似成個月曆冇郁過。回到當月就跳返今日。 */
+  if (!state.calDay || state.calDay.slice(0, 7) !== state.calMonth) {
+    state.calDay = (today.slice(0, 7) === state.calMonth) ? today : state.calMonth + '-01';
+  }
 
   var ym = calYM_();
   var list = calEvents_();
@@ -1940,11 +1976,15 @@ function renderCal() {
 
   /* 月份標題 + 前後掣 */
   /* 掣上面直接寫住前後嗰個月份 —— 淨係得個 ‹ › 箭嘴喺手機上面太細，
-     睇唔出撳得，亦都撳唔中（用戶回報「撳 ‹ 完全冇反應」）。 */
+     睇唔出撳得，亦都撳唔中（用戶回報「撳 ‹ 完全冇反應」）。
+     去到有活動嘅頭尾就 disable，唔好畀人一路㩒落去空白月份。 */
+  var prevMo = calMonAdd_(-1), nextMo = calMonAdd_(1);
   h += '<div class="cal-head">' +
-    '<button class="ghost" onclick="calShift(-1)">‹ ' + calMonLabel_(-1) + '</button>' +
+    '<button class="ghost"' + (prevMo < range.min ? ' disabled' : '') +
+    ' onclick="calShift(-1)">‹ ' + calMonLabel_(prevMo) + '</button>' +
     '<div class="cal-title" onclick="calToday()">' + calTitle_(ym) + '</div>' +
-    '<button class="ghost" onclick="calShift(1)">' + calMonLabel_(1) + ' ›</button></div>';
+    '<button class="ghost"' + (nextMo > range.max ? ' disabled' : '') +
+    ' onclick="calShift(1)">' + calMonLabel_(nextMo) + ' ›</button></div>';
 
   /* 格仔 */
   var wd = t('calWd').split(',');
