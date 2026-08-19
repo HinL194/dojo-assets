@@ -812,7 +812,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v55';
+var APP_VERSION = 'v56';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -882,6 +882,8 @@ var state = {
   evtCatDraft: null,    // 類別清單嘅未儲存草稿
   attPanelId: null,     // 開緊邊個活動嘅記錄出席面板
   attDraft: null,       // {att:{編號:true}, cre:{…}, extra:[編號]} 未儲存草稿
+  dupFromId: null,      // 複製緊邊個活動（'__new__' 編輯器要畫喺嗰張卡入面）
+  dupFromName: '',      // 純顯示：編輯器標題寫「照 XXX 開」
   calMonth: '',         // 日曆睇緊邊個月（yyyy-MM，空 = 本月）
   calDay: '',           // 日曆揀咗邊日（yyyy-MM-dd，空 = 今日）
   calCat: ''            // 日曆類別篩選（空 = 全部）
@@ -1491,9 +1493,11 @@ function eventsSection() {
     (pending.length ? ' <span class="cnt2">' + pending.length + '</span>' : '') + '</div>';
 
   if (d.canEdit) {
+    /* dupFromId 有值嗰陣個 __new__ 編輯器係畫喺被複製嗰張卡入面，唔係呢度 */
+    var newHere = state.eventEditId === '__new__' && !state.dupFromId;
     h += '<button class="repairbtn" onclick="openEventEditor(\'__new__\')">＋ 新增活動' +
-      (state.eventEditId === '__new__' ? ' ✕' : '') + '</button>';
-    if (state.eventEditId === '__new__') h += renderEventEditor('__new__');
+      (newHere ? ' ✕' : '') + '</button>';
+    if (newHere) h += renderEventEditor('__new__');
     h += '<button class="repairbtn" onclick="openCatEdit()">✎ 編輯活動類別' +
       (state.evtCatOpen ? ' ✕' : '') + '</button>';
     if (state.evtCatOpen) h += evtCatPanel();
@@ -1630,9 +1634,14 @@ function eventCard(e) {
           ? '<button class="ghost" onclick="setEvtStatus(\'' + esc(e.id) + '\',\'公開\')">↩ 恢復</button>'
           : '<button class="danger" onclick="setEvtStatus(\'' + esc(e.id) + '\',\'取消\')">取消活動</button>') +
         '</div>' +
-        '<button class="ghost" style="margin-top:8px" onclick="openAttPanel(\'' + esc(e.id) + '\')">' +
-        '📋 記錄出席</button>';
+        '<div class="edit-row" style="margin-top:8px">' +
+        '<button class="ghost" onclick="openAttPanel(\'' + esc(e.id) + '\')">📋 記錄出席</button>' +
+        '<button class="ghost" onclick="dupEvent(\'' + esc(e.id) + '\')">⧉ 照呢個開新</button>' +
+        '</div>';
       if (state.eventEditId === e.id) h += renderEventEditor(e.id);
+      /* 「照呢個開新」開嘅係 __new__ 編輯器，但要畫喺呢張卡入面 ——
+         唔係喺日曆頁撳完會乜都唔出（首頁嗰個 __new__ 位喺 eventsSection）。 */
+      if (state.eventEditId === '__new__' && state.dupFromId === e.id) h += renderEventEditor('__new__');
       if (state.attPanelId === e.id) h += attPanelHtml_(e.id);
     }
     h += '</div>';
@@ -1644,13 +1653,12 @@ function eventCard(e) {
 
 /** 開／關編輯器。開嗰陣由活動 clone 一份草稿出嚟。 */
 function openEventEditor(id) {
-  if (state.eventEditId === id) { state.eventEditId = null; state.evtBuilder = null; return renderEvtView(); }
-  var e = null;
-  if (id !== '__new__') {
-    e = (state.events.upcoming || []).concat(state.events.past || [])
-      .filter(function (x) { return x.id === id; })[0];
-  }
+  if (state.eventEditId === id && !state.dupFromId) return closeEventEditor();
+  var e = (id === '__new__') ? null : evtById_(id);
   state.eventEditId = id;
+  /* 由「複製」開嘅 __new__ 編輯器要清走，唔係首頁粒「＋ 新增活動」會靜靜哋
+     承繼咗上次複製嗰份草稿。 */
+  state.dupFromId = null; state.dupFromName = '';
   /* ⚠️ 兩個分支要一齊改 —— 新欄位漏咗其中一邊就會變 undefined */
   state.evtBuilder = e ? {
     name: e.name, cat: e.cat || '', date: e.date, time: e.time, place: e.place, detail: e.detail,
@@ -1668,7 +1676,39 @@ function openEventEditor(id) {
   };
   renderEvtView();
 }
-function closeEventEditor() { state.eventEditId = null; state.evtBuilder = null; renderEvtView(); }
+function closeEventEditor() {
+  state.eventEditId = null; state.evtBuilder = null;
+  state.dupFromId = null; state.dupFromName = '';
+  renderEvtView();
+}
+
+/**
+ * 照住一個現有活動開新一個（例如每月維修：名、類別、對象、分數全部一樣，
+ * 淨係換日期）。
+ *
+ * ⚠️ 日期同回覆截止特登唔複製 —— 兩樣都係綁死喺舊嗰個活動嘅。日期留空
+ *    仲會逼你自己揀，唔會出現「撳咗儲存先發覺同舊活動同一日」。
+ * ⚠️ 出席／貢獻名單、參加人數都唔會帶過嚟 —— saveEvent 開新活動嗰陣
+ *    根本唔會讀呢幾樣，但擺喺草稿度一樣係錯嘅暗示。
+ */
+function dupEvent(id) {
+  var e = evtById_(id);
+  if (!e) return toast('搵唔到呢個活動');
+  if (state.eventEditId === '__new__' && state.dupFromId === id) return closeEventEditor();
+  state.eventEditId = '__new__';
+  state.dupFromId = id;
+  state.dupFromName = e.name || '';
+  state.evtBuilder = {
+    name: e.name, cat: e.cat || '', date: '', time: e.time, place: e.place, detail: e.detail,
+    deadline: '', cap: e.cap || '', fee: e.fee, host: e.host, link: e.link,
+    needRsvp: e.needRsvp,
+    status: e.status === '取消' ? '公開' : e.status,   // 唔會開一個一出世就取消咗嘅活動
+    countsContrib: !!e.countsContrib, points: e.points || 1,
+    viewRoles: (e.viewRoles || []).slice(), viewTags: (e.viewTags || []).slice(),
+    inviteRoles: (e.inviteRoles || []).slice(), inviteTags: (e.inviteTags || []).slice()
+  };
+  renderEvtView();
+}
 
 /**
  * ⚠️ 每次 re-render 之前一定要行呢個。
@@ -1729,7 +1769,12 @@ function renderEventEditor(id) {
   };
 
   var h = '<div class="card ordpanel" style="border-color:var(--ai)" onclick="event.stopPropagation()">' +
-    '<div class="rota-no">' + (isNew ? '新增活動' : '編輯活動') + '</div>' +
+    '<div class="rota-no">' +
+    (isNew
+      ? (state.dupFromId ? '新增活動（照「' + esc(state.dupFromName) + '」開）' : '新增活動')
+      : '編輯活動') + '</div>' +
+    (isNew && state.dupFromId
+      ? '<p class="svc-hint">設定全部帶咗過嚟，日期同回覆截止要自己填。</p>' : '') +
 
     '<label>活動名稱 *</label><input id="evName" maxlength="60" value="' + esc(b.name) + '">' +
     '<label>類別</label><div class="tag-pick">' +
@@ -1820,6 +1865,7 @@ function saveEventEditor(id) {
     if (!r.ok) return toast(r.msg);
     toast(id === '__new__' ? '已新增活動' : '已更新活動');
     state.eventEditId = null; state.evtBuilder = null;
+    state.dupFromId = null; state.dupFromName = '';
     reloadEvents();
   }).catch(function (e) { toast('失敗：' + e.message); });
 }
@@ -3039,6 +3085,7 @@ function clearSession_() {
   state.eventEditId = null; state.evtBuilder = null;
   state.evtCatOpen = false; state.evtCatDraft = null;
   state.attPanelId = null; state.attDraft = null;
+  state.dupFromId = null; state.dupFromName = '';
   state.calMonth = ''; state.calDay = ''; state.calCat = '';
 }
 
