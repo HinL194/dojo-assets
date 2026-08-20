@@ -327,6 +327,25 @@
   .duty .tag.ok{color:var(--matsu);border-color:var(--matsu)}
   /* 類別 pill 嘅顏色由 JS 落 inline style（類別數量可變，寫死唔到） */
   .duty .tag.cat{font-weight:500}
+  /* 「新公佈」—— 日子仲遠但啱啱開，話返畀人知點解會出喺首頁。
+     ⚠️ 寫足 `.duty .tag.new`（0,3,0）先夠贏上面 `.duty .tag`（0,2,0）。
+        呢個 codebase 中過 specificity 打和嘅招（.cal-head button vs
+        button.ghost），唔好靠同分撞彩。 */
+  .duty .tag.new{color:var(--ai);border-color:var(--ai);font-weight:500}
+
+  /* 未回覆提示條：一行高，擺喺首頁最頂。活動段搬咗落今日工作下面，
+     呢條就係唯一嘅「有嘢等緊你」訊號，所以要撞眼但唔佔位。 */
+  .evt-banner{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    width:100%;background:var(--ai);color:#fff;border:none;
+    padding:10px 14px;border-radius:var(--radius);margin-bottom:10px;
+    font-size:13.5px;font-family:inherit;font-weight:500;letter-spacing:.04em;
+    cursor:pointer;text-align:left;
+  }
+  .evt-banner .ar{font-size:17px;line-height:1;opacity:.75}
+  /* 「查看全部活動」擺喺活動段最尾 —— 用返 .repairbtn 個樣，但要淡啲，
+     因為佢係一條出路，唔係一個動作。 */
+  .repairbtn.evt-all{color:var(--ink-soft);border-color:var(--line);margin-top:2px}
   .rsvp-row{display:flex;gap:8px;margin-top:10px}
   .rsvp-row button{flex:1}
 
@@ -812,7 +831,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v57';
+var APP_VERSION = 'v58';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -875,7 +894,6 @@ var state = {
   eventsLoading: false, // 攞緊 —— 擋住重複叫 API
   eventOpenId: null,    // 展開緊邊個活動
   eventRoster: {},      // 各活動嘅回覆名單（null = 攞緊）
-  eventPastOpen: false, // 顯示埋過咗嘅活動
   eventEditId: null,    // 編輯緊邊個活動（'__new__' = 新增）
   evtBuilder: null,     // 活動編輯器嘅未儲存草稿
   evtCatOpen: false,    // 活動類別設定面板開合
@@ -985,7 +1003,10 @@ var I18N = {
     svcAllDone: '已記錄，本月檢查全部完成 ✓',
 
     /* 活動 */
-    evtSection: '活動', evtPast: '過往活動',
+    evtSection: '活動',
+    evtBannerN: '個活動未回覆', evtAllLink: '查看全部活動',
+    evtMore1: '還有 ', evtMore2: ' 個活動', evtNone: '近期沒有活動',
+    evtNew: '新公佈',
     evtJoin: '參加', evtDecline: '不參加', evtGoing: '已參加',
     evtNotice: '公告', evtCancelled: '已取消',
     evtWhen: '日期時間', evtWhere: '地點', evtHost: '負責人',
@@ -1053,7 +1074,10 @@ var I18N = {
     pickResult: 'Please select a result', svcSaved: 'Inspection logged',
     svcAllDone: 'Logged — all bows inspected this month ✓',
 
-    evtSection: 'Events', evtPast: 'Past events',
+    evtSection: 'Events',
+    evtBannerN: 'event(s) awaiting your reply', evtAllLink: 'View all events',
+    evtMore1: '', evtMore2: ' more event(s)', evtNone: 'No events coming up',
+    evtNew: 'New',
     evtJoin: 'Going', evtDecline: 'Not going', evtGoing: 'Going',
     evtNotice: 'Notice', evtCancelled: 'Cancelled',
     evtWhen: 'Date & time', evtWhere: 'Place', evtHost: 'Organiser',
@@ -1328,6 +1352,17 @@ function renderToday() {
   var d = state.publicData;
   var h = '';
 
+  /* 未回覆提示條 —— 活動段搬咗落今日工作下面，所以最頂要留返一行，
+     唔係啲人唔會捲落去，就唔知有嘢等緊佢回。 */
+  if (state.auth && state.events && !state.events.error) {
+    var nPend = todayEvents_().filter(evtPending_).length;
+    if (nPend) {
+      h += '<button class="evt-banner" onclick="jumpEvents()">' +
+        '<span>● ' + nPend + ' ' + t('evtBannerN') + '</span>' +
+        '<span class="ar">›</span></button>';
+    }
+  }
+
   /* 點名按鈕（頂部） */
   var st = d.settings || {};
   if (state.auth && st.rollCallUrl) {
@@ -1344,9 +1379,6 @@ function renderToday() {
       (state.repairFormOpen ? ' ✕' : '') + '</button>';
     if (state.repairFormOpen) h += repairFormCard();
   }
-
-  /* 活動（要登入先見到）*/
-  if (state.auth) h += eventsSection();
 
   /* 公家弓檢查維修卡（有排程未完成先出現；要登入先見到） */
   if (state.auth && d.schedule && !d.schedule.complete) {
@@ -1387,6 +1419,11 @@ function renderToday() {
   } else {
     d.todayDuties.forEach(function (r, i) { h += dutyCard(r, i); });
   }
+
+  /* 活動（要登入先見到）
+     ⚠️ 一定要排喺今日工作之後。之前擺咗喺最頂，活動一多就將今日工作
+        推到成版之下 —— 個頁面就唔再係「今日」。 */
+  if (state.auth) h += eventsSection();
 
   if (state.auth) {
     h += '<details id="rotaDetails"' + (state.rotaOpen ? ' open' : '') + ' style="margin-top:14px">' +
@@ -1450,6 +1487,68 @@ function dutyCard(r, i) {
 }
 /* ---------- 活動 ---------- */
 
+/* 首頁只出「要你做嘢／就嚟到／啱啱公佈」嘅活動，其餘去日曆睇。
+   之前係將 upcoming 全部出晒，而且成段排喺今日工作之前 —— 活動一多，
+   今日工作就被推到成版之下，個頁面就唔再係「今日」。 */
+var EVT_DAYS = 7;
+/** 首頁最多出幾多張活動卡。再多就叫人入日曆，唔好又推冧今日工作。 */
+var EVT_MAX = 6;
+
+/** yyyy-MM-dd 加 n 日。呢度要用 Date 係因為跨月／跨年，字串加唔到。 */
+function dayAdd_(key, n) {
+  var p = String(key || '').split('-');
+  if (p.length !== 3) return '';
+  var d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]) + n);
+  return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) +
+    '-' + ('0' + d.getDate()).slice(-2);
+}
+
+/** 呢個活動仲等緊我回覆。eventsSection 同 eventCard 兩邊要用同一個定義，
+ *  所以抽咗做一個 function —— 之前兩處各自寫多次，改一邊好易漏另一邊。 */
+function evtPending_(e) {
+  return !!(e.needRsvp && e.invited && !e.myRsvp && e.status === '公開');
+}
+
+/** 啱啱公佈（建立日期喺 EVT_DAYS 日內）。 */
+function evtIsNew_(e, today) {
+  return !!(e.created && today && e.created >= dayAdd_(today, -EVT_DAYS));
+}
+
+/**
+ * 首頁應唔應該出呢個活動。三條任何一條成立就出：
+ *   · 未回覆 —— ⚠️ 呢條**唔受日數限制**。三個星期後嘅活動只要未回覆
+ *     就要一直出，唔係啲人永遠都唔會記得回。唔好順手同下面兩條合埋。
+ *   · 日期喺 EVT_DAYS 日內 —— 就嚟到
+ *   · 建立日期喺 EVT_DAYS 日內 —— 啱啱公佈。公告型活動（唔使回覆）冇
+ *     「已回覆」呢個狀態，所以呢條就係佢唯一嘅提醒機制。
+ */
+function evtOnToday_(e, today) {
+  if (evtPending_(e)) return true;
+  if (e.date && today && e.date <= dayAdd_(today, EVT_DAYS)) return true;
+  return evtIsNew_(e, today);
+}
+
+/** 首頁要出嘅活動：未回覆排先，其餘按日期。 */
+function todayEvents_() {
+  var d = state.events || {};
+  var today = d.today || '';
+  return (d.upcoming || [])
+    .filter(function (e) { return evtOnToday_(e, today); })
+    .sort(function (a, b) {
+      var pa = evtPending_(a) ? 0 : 1, pb = evtPending_(b) ? 0 : 1;
+      if (pa !== pb) return pa - pb;
+      return (a.date || '') < (b.date || '') ? -1 : 1;
+    });
+}
+
+function goCal() { state.tab = 'cal'; render(); }
+
+/** 頂部提示條撳落去，捲到活動段。跟 openSettings 現成嗰個 pattern。 */
+function jumpEvents() {
+  var el = document.getElementById('evtBox');
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 /**
  * 首頁活動段。
  * ⚠️ 唔可以用 renderToday 開頭嗰種「掟走成個 main() 出 loading」嘅寫法 ——
@@ -1480,39 +1579,25 @@ function eventsSection() {
       '<br><br><button class="ghost" onclick="reloadEvents()">' + t('retry') + '</button></div>';
   }
 
-  var up = d.upcoming || [];
-  /* 一個活動都冇就唔佔位 —— 但管理層要留返個「新增活動」掣，
-     唔係第一個活動永遠都開唔到。 */
-  if (!up.length && !(d.past || []).length && !d.canEdit) return '';
+  /* 一個活動都冇就唔佔位 —— 但管理層要留返條路入日曆，唔係第一個活動
+     永遠都開唔到（「＋ 新增活動」而家喺日曆頁）。 */
+  if (!(d.upcoming || []).length && !(d.past || []).length && !d.canEdit) return '';
 
-  /* 未回覆排最前 —— 呢啲係要人做嘢嘅 */
-  var pending = up.filter(function (e) { return e.needRsvp && e.invited && !e.myRsvp && e.status === '公開'; });
-  var rest = up.filter(function (e) { return pending.indexOf(e) === -1; });
+  var all = todayEvents_();
+  var np = all.filter(evtPending_).length;
+  var shown = all.slice(0, EVT_MAX);
 
-  var h = '<div class="section-label">' + t('evtSection') +
-    (pending.length ? ' <span class="cnt2">' + pending.length + '</span>' : '') + '</div>';
+  var h = '<div class="section-label" id="evtBox">' + t('evtSection') +
+    (np ? ' <span class="cnt2">' + np + '</span>' : '') + '</div>';
 
-  if (d.canEdit) {
-    /* dupFromId 有值嗰陣個 __new__ 編輯器係畫喺被複製嗰張卡入面，唔係呢度 */
-    var newHere = state.eventEditId === '__new__' && !state.dupFromId;
-    h += '<button class="repairbtn" onclick="openEventEditor(\'__new__\')">＋ 新增活動' +
-      (newHere ? ' ✕' : '') + '</button>';
-    if (newHere) h += renderEventEditor('__new__');
-    h += '<button class="repairbtn" onclick="openCatEdit()">✎ 編輯活動類別' +
-      (state.evtCatOpen ? ' ✕' : '') + '</button>';
-    if (state.evtCatOpen) h += evtCatPanel();
-  }
+  if (!shown.length) h += '<div class="empty">' + t('evtNone') + '</div>';
+  else shown.forEach(function (e) { h += eventCard(e); });
 
-  pending.forEach(function (e) { h += eventCard(e); });
-  rest.forEach(function (e) { h += eventCard(e); });
-
-  if ((d.past || []).length) {
-    h += '<details class="rota"' + (state.eventPastOpen ? ' open' : '') +
-      ' ontoggle="state.eventPastOpen=this.open"><summary>' + t('evtPast') +
-      ' <span class="cnt2">' + d.past.length + '</span></summary>';
-    d.past.forEach(function (e) { h += eventCard(e); });
-    h += '</details>';
-  }
+  /* 過往活動同埋近期以外嗰啲，全部去日曆睇 —— 日曆揀月已經涵蓋晒，
+     首頁再開多個 <details> 只係又佔位。 */
+  var more = all.length - shown.length;
+  h += '<button class="repairbtn evt-all" onclick="goCal()">' +
+    (more ? t('evtMore1') + more + t('evtMore2') : t('evtAllLink')) + ' →</button>';
   return h;
 }
 
@@ -1552,7 +1637,7 @@ function catPill(cat) {
 function eventCard(e) {
   var open = state.eventOpenId === e.id;
   var going = e.myRsvp === '參加';
-  var pending = e.needRsvp && e.invited && !e.myRsvp && e.status === '公開';
+  var pending = evtPending_(e);
   var cls = 'card duty evt' + (pending ? ' pending' : '') + (going ? ' going' : '');
 
   var when = (e.date ? esc(dmy_(e.date)) : '') + (e.time ? ' ' + esc(e.time) : '');
@@ -1571,6 +1656,8 @@ function eventCard(e) {
     '<div class="duty-name">' + esc(e.name) +
     (sub ? '<div class="note">' + sub + '</div>' : '') + '</div>' +
     catPill(e.cat) +
+    /* 話返畀人知點解呢個活動會出喺首頁（日子仲遠，但啱啱先公佈） */
+    (evtIsNew_(e, (state.events || {}).today) ? '<span class="tag new">' + t('evtNew') + '</span>' : '') +
     pill +
     (e.link ? '<a class="linkbtn" href="' + esc(e.link) + '" target="_blank" rel="noopener" ' +
       'onclick="event.stopPropagation()">開啟 ↗</a>' : '') +
@@ -1656,7 +1743,7 @@ function openEventEditor(id) {
   if (state.eventEditId === id && !state.dupFromId) return closeEventEditor();
   var e = (id === '__new__') ? null : evtById_(id);
   state.eventEditId = id;
-  /* 由「複製」開嘅 __new__ 編輯器要清走，唔係首頁粒「＋ 新增活動」會靜靜哋
+  /* 由「複製」開嘅 __new__ 編輯器要清走，唔係日曆頁粒「＋ 新增活動」會靜靜哋
      承繼咗上次複製嗰份草稿。 */
   state.dupFromId = null; state.dupFromName = '';
   /* ⚠️ 兩個分支要一齊改 —— 新欄位漏咗其中一邊就會變 undefined */
@@ -2079,7 +2166,7 @@ function toggleEvent(id) {
 }
 function reloadEvents() {
   state.events = null; state.eventRoster = {};
-  if (state.tab === 'cal') renderCal(); else renderToday();
+  renderEvtView();
 }
 
 /* ---------- 日曆 ---------- */
@@ -2210,6 +2297,18 @@ function renderCal() {
   });
 
   var h = '';
+
+  /* 管理層入口 —— 由首頁搬咗過嚟，日曆而家係活動嘅主場 */
+  if (d.canEdit) {
+    /* dupFromId 有值嗰陣個 __new__ 編輯器係畫喺被複製嗰張卡入面，唔係呢度 */
+    var newHere = state.eventEditId === '__new__' && !state.dupFromId;
+    h += '<button class="repairbtn" onclick="openEventEditor(\'__new__\')">＋ 新增活動' +
+      (newHere ? ' ✕' : '') + '</button>';
+    if (newHere) h += renderEventEditor('__new__');
+    h += '<button class="repairbtn" onclick="openCatEdit()">✎ 編輯活動類別' +
+      (state.evtCatOpen ? ' ✕' : '') + '</button>';
+    if (state.evtCatOpen) h += evtCatPanel();
+  }
 
   /* 類別篩選 */
   if ((d.allCats || []).length) {
@@ -3082,7 +3181,7 @@ function clearSession_() {
   state.memberOpenId = null; state.examOther = {};
   state.memberShowAll = false; state.addMemberOpen = false;
   state.annText = null;
-  state.eventOpenId = null; state.eventPastOpen = false;
+  state.eventOpenId = null;
   state.eventEditId = null; state.evtBuilder = null;
   state.evtCatOpen = false; state.evtCatDraft = null;
   state.attPanelId = null; state.attDraft = null;
