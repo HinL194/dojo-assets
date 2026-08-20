@@ -391,6 +391,8 @@
     padding:3px 9px;cursor:pointer;white-space:nowrap;
   }
   .cal-clear:active{background:var(--paper)}
+  /* 成個月模式下，過咗期嗰段摺疊 —— 同上面將來嘅活動拉開少少距離 */
+  .cal-past{margin-top:10px;border-top:1px solid var(--line);padding-top:4px}
   /* 活動詳情：打橫排，唔夠位就成項跳落一行。
      ⚠️ 唔可以用 .kv —— 佢係 flex 一行一對，塞幾對入同一個就會逼到啲字直住排。 */
   .evt-kv{
@@ -842,7 +844,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v59';
+var APP_VERSION = 'v60';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -915,7 +917,8 @@ var state = {
   dupFromName: '',      // 純顯示：編輯器標題寫「照 XXX 開」
   calMonth: '',         // 日曆睇緊邊個月（yyyy-MM，空 = 本月）
   calDay: '',           // 日曆揀咗邊日（yyyy-MM-dd，空 = 唔篩，列出成個月）
-  calCat: ''            // 日曆類別篩選（空 = 全部）
+  calCat: '',           // 日曆類別篩選（空 = 全部）
+  calPastOpen: false    // 日曆成個月模式下，過咗期嗰段摺疊開咗未
 };
 
 try {
@@ -1028,6 +1031,7 @@ var I18N = {
     /* 日曆 */
     calAll: '全部', calNoEvent: '這日沒有活動',
     calNoEventMonth: '這個月沒有活動', calShowMonth: '✕ 顯示整月',
+    calPast: '已過去的活動',
     calWd: '日,一,二,三,四,五,六',
 
     /* 公家弓 */
@@ -1099,6 +1103,7 @@ var I18N = {
 
     calAll: 'All', calNoEvent: 'Nothing on this day',
     calNoEventMonth: 'No events this month', calShowMonth: '✕ Whole month',
+    calPast: 'Past events',
     calWd: 'S,M,T,W,T,F,S',
 
     searchBow: 'Search number, brand…', allTypes: 'All', allKg: 'All weights',
@@ -2399,9 +2404,27 @@ function renderCal() {
       : '') + '</div>';
   if (!sel.length) {
     h += '<div class="empty">' + t(state.calDay ? 'calNoEvent' : 'calNoEventMonth') + '</div>';
-  } else {
-    /* 每張卡自己個 sub-line 已經出咗日期，所以成個月列表唔使另加日期標題 */
+  } else if (state.calDay) {
+    /* 揀咗一日就照出，唔使分過去／將來 —— 你特登撳嗰日就係想睇嗰日 */
     sel.forEach(function (e) { h += eventCard(e); });
+  } else {
+    /* 成個月：過咗期嘅摺埋落最底，要撳開先睇到 —— 睇成個月通常係想知
+       仲有咩未搞，舊嘢排喺前面就要一路捲先見到將來嗰啲。
+       每張卡自己個 sub-line 已經出咗日期，所以唔使另加日期標題。 */
+    var gone = [], live = [];
+    sel.forEach(function (e) { ((e.date && e.date < today) ? gone : live).push(e); });
+    live.forEach(function (e) { h += eventCard(e); });
+    if (!live.length) {
+      /* 成個月都係舊活動（即係望緊返轉頭嘅月份）—— 冇嘢好摺，直接出。
+         唔係揀咗個舊月份就見到一片空白同一粒摺疊掣，好似冇活動咁。 */
+      gone.forEach(function (e) { h += eventCard(e); });
+    } else if (gone.length) {
+      h += '<details class="cal-past"' + (state.calPastOpen ? ' open' : '') +
+        ' ontoggle="state.calPastOpen=this.open"><summary>' + t('calPast') +
+        ' <span class="cnt2">' + gone.length + '</span></summary>';
+      gone.forEach(function (e) { h += eventCard(e); });
+      h += '</details>';
+    }
   }
 
   h += '<div class="ver">' + APP_VERSION + '</div>';
@@ -3224,7 +3247,7 @@ function clearSession_() {
   state.evtCatOpen = false; state.evtCatDraft = null;
   state.attPanelId = null; state.attDraft = null;
   state.dupFromId = null; state.dupFromName = '';
-  state.calMonth = ''; state.calDay = ''; state.calCat = '';
+  state.calMonth = ''; state.calDay = ''; state.calCat = ''; state.calPastOpen = false;
 }
 
 function backFromMe() { state.tab = 'today'; render(); }
