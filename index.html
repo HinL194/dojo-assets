@@ -380,6 +380,17 @@
   .cal-dot{width:5px;height:5px;border-radius:50%;display:block}
   .cal-more{font-size:9px;color:var(--ink-soft);line-height:1}
   .cal-day.sel .cal-more{color:#fff}
+  /* 「✕ 顯示整月」—— 揀咗日子先出，撳返轉頭退去成個月。
+     跟 .contrib-refresh 同一個模式（section-label 右邊嘅細掣）。
+     特登唔用 .ghost：ghost 係 button.ghost（0,1,1），加多個 class 去
+     鬥 specificity 好易又搞出上次 .cal-head button 嗰種打和意外。
+     呢個係獨立 class，冇得撞。 */
+  .cal-clear{
+    flex:0 0 auto;background:none;border:1px solid var(--line);border-radius:6px;
+    color:var(--ai);font-family:inherit;font-size:11.5px;letter-spacing:0;
+    padding:3px 9px;cursor:pointer;white-space:nowrap;
+  }
+  .cal-clear:active{background:var(--paper)}
   /* 活動詳情：打橫排，唔夠位就成項跳落一行。
      ⚠️ 唔可以用 .kv —— 佢係 flex 一行一對，塞幾對入同一個就會逼到啲字直住排。 */
   .evt-kv{
@@ -831,7 +842,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v58';
+var APP_VERSION = 'v59';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -903,7 +914,7 @@ var state = {
   dupFromId: null,      // 複製緊邊個活動（'__new__' 編輯器要畫喺嗰張卡入面）
   dupFromName: '',      // 純顯示：編輯器標題寫「照 XXX 開」
   calMonth: '',         // 日曆睇緊邊個月（yyyy-MM，空 = 本月）
-  calDay: '',           // 日曆揀咗邊日（yyyy-MM-dd，空 = 今日）
+  calDay: '',           // 日曆揀咗邊日（yyyy-MM-dd，空 = 唔篩，列出成個月）
   calCat: ''            // 日曆類別篩選（空 = 全部）
 };
 
@@ -1016,6 +1027,7 @@ var I18N = {
 
     /* 日曆 */
     calAll: '全部', calNoEvent: '這日沒有活動',
+    calNoEventMonth: '這個月沒有活動', calShowMonth: '✕ 顯示整月',
     calWd: '日,一,二,三,四,五,六',
 
     /* 公家弓 */
@@ -1086,6 +1098,7 @@ var I18N = {
     evtOver: 'This event has passed — replies are locked. Ask a leader to correct it.',
 
     calAll: 'All', calNoEvent: 'Nothing on this day',
+    calNoEventMonth: 'No events this month', calShowMonth: '✕ Whole month',
     calWd: 'S,M,T,W,T,F,S',
 
     searchBow: 'Search number, brand…', allTypes: 'All', allKg: 'All weights',
@@ -1420,14 +1433,15 @@ function renderToday() {
     d.todayDuties.forEach(function (r, i) { h += dutyCard(r, i); });
   }
 
-  /* 活動（要登入先見到）
-     ⚠️ 一定要排喺今日工作之後。之前擺咗喺最頂，活動一多就將今日工作
-        推到成版之下 —— 個頁面就唔再係「今日」。 */
-  if (state.auth) h += eventsSection();
-
   if (state.auth) {
+    /* 完整每月工作表緊貼今日工作 —— 兩者係同一份表（今日 vs 成個月），
+       睇完今日想望下成個月係好自然嘅動作，中間唔應該隔住活動。
+       摺埋淨係一行高，唔會推冧上面。 */
     h += '<details id="rotaDetails"' + (state.rotaOpen ? ' open' : '') + ' style="margin-top:14px">' +
       '<summary>' + t('fullRota') + '</summary><div id="rotaBody"></div></details>';
+    /* 活動排最後 —— ⚠️ 唔可以搬返上去今日工作之前。v58 之前擺咗喺最頂，
+       活動一多就將今日工作推到成版之下，個頁面就唔再係「今日」。 */
+    h += eventsSection();
   } else {
     h += '<div class="login-hint">' + t('todayLoginHint') + '<br>' +
       '<button class="ghost" style="margin-top:9px" onclick="openLogin()">' + t('login') + '</button></div>';
@@ -2218,7 +2232,11 @@ function calShift(n) {
   state.calMonth = mo;
   renderCal();                                // 揀咗嗰日由 renderCal 夾返入呢個月
 }
-function calPick(day) { state.calDay = day; renderCal(); }
+/** 撳同一日第二次＝取消揀，退返「成個月」模式 */
+function calPick(day) {
+  state.calDay = (state.calDay === day) ? '' : day;
+  renderCal();
+}
 function calFilter(c) { state.calCat = c; renderCal(); }
 
 var EN_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -2233,12 +2251,13 @@ function calTitle_(ym) {
     ? EN_MON[ym.m - 1] + ' ' + ym.y
     : ym.y + ' 年 ' + ym.m + ' 月';
 }
-/** 撳月份標題跳返今個月／今日 */
+/** 撳月份標題跳返今個月。特登唔順手揀埋今日 —— 同「一入嚟」一致，
+ *  都係列出成個月。想淨係睇今日就自己撳今日嗰格。 */
 function calToday() {
   var today = (state.events && state.events.today) || '';
   if (!today) return;
   state.calMonth = today.slice(0, 7);
-  state.calDay = today;
+  state.calDay = '';
   renderCal();
 }
 
@@ -2280,11 +2299,11 @@ function renderCal() {
   var range = calRange_();
   if (state.calMonth < range.min) state.calMonth = range.min;
   if (state.calMonth > range.max) state.calMonth = range.max;
-  /* 揀咗嗰日一定要喺睇緊嗰個月入面 —— 唔係轉咗月，下面張詳情卡仲停喺
-     原本嗰日，睇落好似成個月曆冇郁過。回到當月就跳返今日。 */
-  if (!state.calDay || state.calDay.slice(0, 7) !== state.calMonth) {
-    state.calDay = (today.slice(0, 7) === state.calMonth) ? today : state.calMonth + '-01';
-  }
+  /* 揀咗嗰日一定要喺睇緊嗰個月入面 —— 唔係轉咗月，下面個清單仲停喺
+     原本嗰日，睇落好似成個月曆冇郁過。轉月就當你唔再篩日子。
+     ⚠️ 空白**唔可以**再自動填今日：今日通常冇活動，一入日曆第一眼
+        就係「這日沒有活動」，好似個日曆壞咗咁。空白＝列出成個月。 */
+  if (state.calDay && state.calDay.slice(0, 7) !== state.calMonth) state.calDay = '';
 
   var ym = calYM_();
   var list = calEvents_();
@@ -2359,12 +2378,31 @@ function renderCal() {
   }
   h += '</div>';
 
-  /* 揀咗嗰日 */
-  var sel = byDay[state.calDay] || [];
-  h += '<div class="section-label">' + esc(dmy_(state.calDay)) +
-    (sel.length ? ' <span class="cnt2">' + sel.length + '</span>' : '') + '</div>';
-  if (!sel.length) h += '<div class="empty">' + t('calNoEvent') + '</div>';
-  else sel.forEach(function (e) { h += eventCard(e); });
+  /* 冇揀日子＝列出成個月（一入嚟就係呢個狀態）；撳一日先篩落去。 */
+  var sel, label;
+  if (state.calDay) {
+    sel = byDay[state.calDay] || [];
+    label = esc(dmy_(state.calDay));
+  } else {
+    /* ⚠️ 要由 list（即 calEvents_()，已經套用咗類別篩選）篩月份前綴，
+       唔可以由 byDay 攞 —— byDay 係跨月份 keyed by 全日期。 */
+    sel = list.filter(function (e) {
+      return e.date && e.date.slice(0, 7) === state.calMonth;
+    }).sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+    label = calTitle_(ym);
+  }
+  h += '<div class="section-label">' + label +
+    (sel.length ? ' <span class="cnt2">' + sel.length + '</span>' : '') +
+    (state.calDay
+      ? '<button class="cal-clear" onclick="calPick(\'' + state.calDay + '\')">' +
+        t('calShowMonth') + '</button>'
+      : '') + '</div>';
+  if (!sel.length) {
+    h += '<div class="empty">' + t(state.calDay ? 'calNoEvent' : 'calNoEventMonth') + '</div>';
+  } else {
+    /* 每張卡自己個 sub-line 已經出咗日期，所以成個月列表唔使另加日期標題 */
+    sel.forEach(function (e) { h += eventCard(e); });
+  }
 
   h += '<div class="ver">' + APP_VERSION + '</div>';
   main().innerHTML = h;
