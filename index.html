@@ -793,7 +793,7 @@
 <body>
 
 <header id="appHeader">
-  <div class="logo" id="moonBtn" onclick="showMoonInfo()" title="撳一下睇今日月相" role="button" tabindex="0">
+  <div class="logo" id="moonBtn" onclick="showMoonInfo()" title="按一下查看今日月相" role="button" tabindex="0">
     <span id="moonIcon"></span>
     <span class="phase-wrap">
       <span class="phase" id="phaseName"></span>
@@ -812,7 +812,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v56';
+var APP_VERSION = 'v57';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -921,7 +921,7 @@ function call(fn) {
   // ── 入口二：喺 GitHub Pages（或其他地方）→ 打 JSON 介面
   if (!API_URL) {
     return Promise.reject(new Error(
-      '未設定 API_URL：請喺 Index.html 頂部填返 Apps Script 嘅 /exec 網址'));
+      '未設定 API_URL：請在 Index.html 頂部填入 Apps Script 的 /exec 網址'));
   }
   return fetch(API_URL, {
     method: 'POST',
@@ -959,20 +959,20 @@ var I18N = {
 
     /* 登入 */
     memberNo: '會員編號', pin: 'PIN',
-    loginHint: '登入後可以睇點名連結同完整每月工作表，亦可以回報「今日未能完成」嘅工作。工務組仲可以點算物資、報維修。',
+    loginHint: '登入後可以查看點名連結和完整每月工作表，亦可以回報「今日未能完成」的工作。工務組還可以點算物資、報維修。',
     pinTipTitle: '未改過 PIN？',
-    pinTipBody: '預設 PIN 係你嘅會員編號補足 <b>4 位數字</b>。<br>例：會員編號 <b>123</b> → PIN 係 <b>0123</b><br>登入後請撳頁首自己個名，改一個只用喺呢個網頁嘅 PIN。',
+    pinTipBody: '預設 PIN 是你的會員編號補足 <b>4 位數字</b>。<br>例：會員編號 <b>123</b> → PIN 是 <b>0123</b><br>登入後請按頁首自己的名字，改一個只用於這個網頁的 PIN。',
     backToday: '← 返回今日工作',
-    needIdPin: '請輸入會員編號同 PIN',
-    loggingIn: '登入中…', pinPlaceholder: '你嘅 PIN',
+    needIdPin: '請輸入會員編號和 PIN',
+    loggingIn: '登入中…', pinPlaceholder: '你的 PIN',
 
     /* 今日工作 */
     rollCall: '點名', reportRepair: '🔧 報維修',
-    todayPrefix: '今日 · ', noDuty: '今日冇編排工作 ○',
+    todayPrefix: '今日 · ', noDuty: '今日沒有編排工作 ○',
     fullRota: '查看完整每月工作表',
-    todayLoginHint: '登入後可以睇點名連結、完整每月工作表，同埋回報今日未能完成嘅工作。',
+    todayLoginHint: '登入後可以查看點名連結、完整每月工作表，以及回報今日未能完成的工作。',
     itemPos: '器具／位置', problemDesc: '問題描述',
-    fillBoth: '請填齊器具同問題描述', repairDone: '已報告維修',
+    fillBoth: '請填齊器具和問題描述', repairDone: '已報告維修',
     cantFinish: '未能完成', undoReport: '取消回報',
 
     /* 保養卡 */
@@ -980,46 +980,46 @@ var I18N = {
     svcResult: '檢查結果（可多選）',
     svcOther: '其他（自由填寫）', svcNote: '備註（選填）',
     svcForMember: '代其他會員登記（會員編號，留空 = 自己）',
-    svcHint: '撳弓號登記已保養／檢查結果',
-    pickResult: '請揀檢查結果', svcSaved: '已記錄保養',
+    svcHint: '按弓號登記已保養／檢查結果',
+    pickResult: '請選擇檢查結果', svcSaved: '已記錄保養',
     svcAllDone: '已記錄，本月檢查全部完成 ✓',
 
     /* 活動 */
     evtSection: '活動', evtPast: '過往活動',
-    evtJoin: '參加', evtDecline: '唔參加', evtGoing: '已參加',
+    evtJoin: '參加', evtDecline: '不參加', evtGoing: '已參加',
     evtNotice: '公告', evtCancelled: '已取消',
     evtWhen: '日期時間', evtWhere: '地點', evtHost: '負責人',
     evtFee: '費用', evtDeadline: '回覆截止', evtCap: '人數上限',
-    evtRoster: '睇回覆情況', evtFull: '人數已滿', evtClosed: '已過回覆截止',
-    evtOver: '活動已經過咗，回覆改唔到；要更正請搵組長',
+    evtRoster: '查看回覆情況', evtFull: '人數已滿', evtClosed: '已過回覆截止',
+    evtOver: '活動已經結束，回覆不能再更改；如需更正請聯絡組長',
 
     /* 日曆 */
-    calAll: '全部', calNoEvent: '呢日冇活動',
+    calAll: '全部', calNoEvent: '這日沒有活動',
     calWd: '日,一,二,三,四,五,六',
 
     /* 公家弓 */
     searchBow: '搜尋編號、品牌…', allTypes: '全部', allKg: '全部弓力',
-    noBowFound: '搵唔到符合嘅弓',
+    noBowFound: '找不到符合的弓',
     loanReason: '借用原因', forGuest: '代訪客／其他人登記',
     guestName: '借用人姓名', confirmBorrow: '確認借用',
     needGuestName: '請填借用人姓名', borrowing: '登記中…',
-    borrowed: '已登記借用 ', bowUnavailable: '，借唔到',
+    borrowed: '已登記借用 ', bowUnavailable: '，未能借出',
     totalLoans: '累計借出 ', times: ' 次',
     nextCheck: ' · 距下次檢查 ', due: '已到',
     lastService: '上次保養：', needCheck: '待檢查',
 
     /* 我的資料 */
     myData: '我的資料', name: '姓名', role: '角色',
-    myGear: '我嘅裝備', ownBows: '自有弓（最多 3 張）', quivers: '箭筒（最多 3 個）',
+    myGear: '我的裝備', ownBows: '自有弓（最多 3 張）', quivers: '箭筒（最多 3 個）',
     color: '顏色', bowColor: '弓卷/弓袋顏色', mei: '銘', saveGear: '儲存裝備', gearSaved: '已儲存裝備',
     changePin: '更改 PIN', currentPin: '目前 PIN',
     newPin: '新 PIN（4 至 8 個數字）', newPin2: '再輸入新 PIN',
-    fillThree: '請填齊三格', pinMismatch: '兩次輸入嘅新 PIN 唔一樣',
+    fillThree: '請填齊三格', pinMismatch: '兩次輸入的新 PIN 不一樣',
     pinFormat: '新 PIN 要 4 至 8 個數字', changing: '更改中…',
-    profileNote: '姓名、編號、角色由工務組組長喺名單設定，如有錯請搵工務組組長更改。',
+    profileNote: '姓名、編號、角色由工務組組長在名單設定，如有錯誤請聯絡工務組組長更改。',
     warnHead: '⚠ 請小心改 PIN',
-    warnHit: 'PIN 係<u>明文</u>存放喺道場個 Google Sheet，<br>所有網頁管理員都睇得到。',
-    warnBody: '所以<b>千祈唔好</b>用你銀行、電郵、社交媒體或者任何其他帳戶嘅密碼。<br>揀一組淨係用嚟開呢個網頁嘅數字就得。',
+    warnHit: 'PIN 以<u>明文</u>存放在道場的 Google Sheet，<br>所有網頁管理員都看得到。',
+    warnBody: '所以<b>切勿</b>使用你銀行、電郵、社交媒體或任何其他帳戶的密碼。<br>請選一組只用於這個網頁的數字。',
     fail: '失敗：'
   },
   en: {
@@ -1183,7 +1183,7 @@ function renderMoon() {
   }
   var btn = document.getElementById('moonBtn');
   btn.setAttribute('aria-label', '今日月相：' + m.name + '，光照 ' + m.illum + '%' +
-    (m.visible ? '，月亮喺地平線上' : '，月亮而家喺地平線下'));
+    (m.visible ? '，月亮在地平線上' : '，月亮現時在地平線下'));
 }
 /* 撳月亮 → 雲飄走，月光由左至右照亮（月亮→月相名→標題），
    幾秒後由右至左暗返 */
@@ -1609,7 +1609,7 @@ function eventCard(e) {
       var closed = e.deadline && e.deadline < (state.events.today || '');
       var full = e.cap > 0 && e.yes >= e.cap && !going;
       if (!e.invited) {
-        h += '<p class="svc-hint">你唔喺呢個活動嘅邀請名單，睇得但唔使回覆。</p>';
+        h += '<p class="svc-hint">你不在這個活動的邀請名單，可以查看但不需回覆。</p>';
       } else if (over) {
         h += '<p class="svc-hint">' + t('evtOver') + '</p>';
       } else if (closed) {
@@ -1636,7 +1636,7 @@ function eventCard(e) {
         '</div>' +
         '<div class="edit-row" style="margin-top:8px">' +
         '<button class="ghost" onclick="openAttPanel(\'' + esc(e.id) + '\')">📋 記錄出席</button>' +
-        '<button class="ghost" onclick="dupEvent(\'' + esc(e.id) + '\')">⧉ 照呢個開新</button>' +
+        '<button class="ghost" onclick="dupEvent(\'' + esc(e.id) + '\')">⧉ 複製活動</button>' +
         '</div>';
       if (state.eventEditId === e.id) h += renderEventEditor(e.id);
       /* 「照呢個開新」開嘅係 __new__ 編輯器，但要畫喺呢張卡入面 ——
@@ -1693,7 +1693,7 @@ function closeEventEditor() {
  */
 function dupEvent(id) {
   var e = evtById_(id);
-  if (!e) return toast('搵唔到呢個活動');
+  if (!e) return toast('找不到這個活動');
   if (state.eventEditId === '__new__' && state.dupFromId === id) return closeEventEditor();
   state.eventEditId = '__new__';
   state.dupFromId = id;
@@ -1771,10 +1771,10 @@ function renderEventEditor(id) {
   var h = '<div class="card ordpanel" style="border-color:var(--ai)" onclick="event.stopPropagation()">' +
     '<div class="rota-no">' +
     (isNew
-      ? (state.dupFromId ? '新增活動（照「' + esc(state.dupFromName) + '」開）' : '新增活動')
+      ? (state.dupFromId ? '複製活動（來源：「' + esc(state.dupFromName) + '」）' : '新增活動')
       : '編輯活動') + '</div>' +
     (isNew && state.dupFromId
-      ? '<p class="svc-hint">設定全部帶咗過嚟，日期同回覆截止要自己填。</p>' : '') +
+      ? '<p class="svc-hint">設定已全部複製，日期和回覆截止需要重新填寫。</p>' : '') +
 
     '<label>活動名稱 *</label><input id="evName" maxlength="60" value="' + esc(b.name) + '">' +
     '<label>類別</label><div class="tag-pick">' +
@@ -1795,11 +1795,11 @@ function renderEventEditor(id) {
 
     '<label class="svc-item" style="margin-top:12px">' +
     '<input type="checkbox"' + (b.needRsvp ? ' checked' : '') +
-    ' onchange="togEvtRsvp(this.checked)"><span>要收回覆（唔剔＝純公告）</span></label>';
+    ' onchange="togEvtRsvp(this.checked)"><span>要收回覆（不選＝純公告）</span></label>';
 
   if (b.needRsvp) {
     h += '<label>回覆截止</label><input id="evDeadline" type="date" value="' + esc(b.deadline) + '">' +
-      '<label>人數上限（留空＝冇限）</label>' +
+      '<label>人數上限（留空＝不限）</label>' +
       '<input id="evCap" type="number" inputmode="numeric" min="0" value="' + esc(b.cap) + '">';
   }
 
@@ -1808,12 +1808,12 @@ function renderEventEditor(id) {
     '<label>相關連結</label><input id="evLink" placeholder="https://…" value="' + esc(b.link) + '">';
 
   h += '<div class="rota-no" style="margin-top:16px">邀請對象（會收到邀請、要回覆）</div>' +
-    '<p class="svc-hint">角色同標籤係「或」—— 任何一邊符合就當中。兩個都唔揀＝全館。</p>' +
+    '<p class="svc-hint">角色與標籤是「或」關係 —— 任何一邊符合即包括在內。兩者都不選＝全館。</p>' +
     chips('角色', 'inviteRoles', false, d.allRoles || []) +
     chips('標籤', 'inviteTags', true, d.allTags || []);
 
-  h += '<div class="rota-no" style="margin-top:16px">額外可見對象（睇得到但唔使回覆）</div>' +
-    '<p class="svc-hint">被邀請嘅人一定睇得到，唔使喺呢度再揀一次。</p>' +
+  h += '<div class="rota-no" style="margin-top:16px">額外可見對象（可以查看但不需回覆）</div>' +
+    '<p class="svc-hint">被邀請的人一定看得到，不需在這裡再選一次。</p>' +
     chips('角色', 'viewRoles', false, d.allRoles || []) +
     chips('標籤', 'viewTags', true, d.allTags || []);
 
@@ -1832,12 +1832,12 @@ function renderEventEditor(id) {
      邊個記功唔喺呢度填，係事後喺「📋 記錄出席」剔。 */
   h += '<div class="rota-no" style="margin-top:16px">貢獻</div>' +
     '<label class="svc-item"><input type="checkbox"' + (b.countsContrib ? ' checked' : '') +
-    ' onchange="togEvtContrib(this.checked)"><span>呢個活動計入貢獻</span></label>';
+    ' onchange="togEvtContrib(this.checked)"><span>此活動計入貢獻</span></label>';
   if (b.countsContrib) {
     h += '<label>每人分數（1-20）</label>' +
       '<input id="evPoints" type="number" inputmode="numeric" min="1" max="20" value="' +
       esc(b.points) + '">' +
-      '<p class="svc-hint">儲存之後，喺活動卡撳「📋 記錄出席」剔邊個記功。冇剔人＝冇人加分。</p>';
+      '<p class="svc-hint">儲存後，在活動卡按「📋 記錄出席」選擇誰人記功。沒有選人＝沒有人加分。</p>';
   }
 
   if (!isNew) {
@@ -1871,7 +1871,7 @@ function saveEventEditor(id) {
 }
 
 function setEvtStatus(id, st) {
-  if (st === '取消' && !confirm('確定取消呢個活動？已收到嘅回覆會保留，之後可以恢復。')) return;
+  if (st === '取消' && !confirm('確定取消這個活動？已收到的回覆會保留，之後可以恢復。')) return;
   toast('處理中…');
   call('setEventStatus', authPayload(), id, st).then(function (r) {
     if (!r.ok) return toast(r.msg);
@@ -2010,23 +2010,23 @@ function attPanelHtml_(id) {
     return h + '<div class="loading">' + t('loading') + '</div></div>';
   }
   var r = state.eventRoster[id];
-  if (r && !r.ok) h += '<p class="svc-hint">名單攞唔到：' + esc(r.msg) + '</p>';
+  if (r && !r.ok) h += '<p class="svc-hint">名單載入失敗：' + esc(r.msg) + '</p>';
 
   var e = evtById_(id);
-  h += '<p class="svc-hint">「出席」＝當日真係到咗；「記功」＝計入貢獻分數。' +
+  h += '<p class="svc-hint">「出席」＝當日實際到場；「記功」＝計入貢獻分數。' +
     (e && e.countsContrib
-      ? '呢個活動每人 <b>' + e.points + '</b> 分。'
-      : '⚠️ 呢個活動而家<b>唔計貢獻</b>，剔咗記功都唔會加分 —— 要喺「✎ 編輯」入面開。') +
+      ? '此活動每人 <b>' + e.points + '</b> 分。'
+      : '⚠️ 此活動目前<b>不計貢獻</b>，即使選了記功也不會加分 —— 請先在「✎ 編輯」開啟。') +
     '</p>';
 
   var rows = attRows_(id);
   if (!rows.length) {
-    h += '<div class="empty">冇人喺呢個活動嘅名單入面</div>';
+    h += '<div class="empty">沒有人在這個活動的名單內</div>';
   } else {
     h += '<div class="att-quick">' +
-      '<button class="chip-btn" onclick="attAllPresent(\'' + esc(id) + '\')">全部到咗</button>' +
+      '<button class="chip-btn" onclick="attAllPresent(\'' + esc(id) + '\')">全部出席</button>' +
       '<button class="chip-btn" onclick="attCreditEqPresent()">記功＝出席</button>' +
-      '<button class="chip-btn" onclick="attClear()">全部清走</button></div>';
+      '<button class="chip-btn" onclick="attClear()">全部清除</button></div>';
     h += rows.map(function (x) {
       var a = !!d.att[x.id], c = !!d.cre[x.id];
       return '<div class="att-row">' +
@@ -2039,7 +2039,7 @@ function attPanelHtml_(id) {
     }).join('');
   }
 
-  h += '<label style="margin-top:12px">加名單以外嘅人（會員編號）</label>' +
+  h += '<label style="margin-top:12px">加入名單以外的人（會員編號）</label>' +
     '<div class="edit-row att-add"><input id="attAdd" placeholder="例：194" value="' +
     esc(d.addVal || '') + '">' +
     '<button class="ghost" onclick="attAddId()">加</button></div>';
@@ -2067,7 +2067,7 @@ function saveAttendance(id) {
     /* 貢獻榜由另一份 cache 計，剔完唔重攞就會對唔上 */
     state.contribDetail = {};
     toast(lost > 0
-      ? '已記錄（有 ' + lost + ' 個編號搵唔到，冇加到）'
+      ? '已記錄（有 ' + lost + ' 個編號找不到，未有加入）'
       : '已記錄：出席 ' + res.attended.length + ' 人／記功 ' + res.credited.length + ' 人');
     renderEvtView();
   }).catch(function (err) { toast('失敗：' + err.message); });
@@ -2292,7 +2292,8 @@ function doRsvp(id, ans) {
       if (e.id === id) { e.myRsvp = r.myRsvp; e.yes = r.yes; e.no = r.no; }
     });
     delete state.eventRoster[id];        // 名單過時咗，下次撳先再攞
-    toast(ans === '參加' ? '已回覆：參加' : '已回覆：唔參加');
+    /* ⚠️ 比較用嘅 ans 係試算表值（'唔參加'），出畫面就用書面語 */
+    toast(ans === '參加' ? '已回覆：參加' : '已回覆：不參加');
     renderEvtView();
   }).catch(function (e) { toast('失敗：' + e.message); });
 }
@@ -2393,7 +2394,7 @@ function toggleDuty(i) {
 
 function openReport(i) {
   var r = state.publicData.todayDuties[i];
-  var reason = prompt('「' + r.item + '」今日未能完成，原因？\n（例如：物資不足、時間不夠、器具壞咗）');
+  var reason = prompt('「' + r.item + '」今日未能完成，原因？\n（例如：物資不足、時間不夠、器具損壞）');
   if (reason === null) return;
   if (!String(reason).trim()) return toast('請填原因');
   toast('回報中…');
@@ -2407,7 +2408,7 @@ function openReport(i) {
 }
 function cancelReport(i) {
   var r = state.publicData.todayDuties[i];
-  if (!confirm('取消「' + r.item + '」嘅未能完成回報？')) return;
+  if (!confirm('取消「' + r.item + '」的未能完成回報？')) return;
   call('reportTaskStatus', authPayload(), r.item, '取消回報', '')
     .then(function (res) {
       if (!res.ok) return toast(res.msg);
@@ -2486,7 +2487,7 @@ function renderRota() {
       '<label>Google Form 網址</label><input id="scUrl" value="' + esc(st2.rollCallUrl || '') + '" placeholder="https://docs.google.com/forms/…">' +
       '<div style="margin-top:12px"><button class="primary" onclick="saveRollCall()">儲存點名連結</button></div>' +
       '<p style="font-size:12px;color:var(--ink-soft);margin-top:8px">' +
-      '個別工作亦可以喺下面各自設定連結。</p></div>';
+      '個別工作亦可以在下面各自設定連結。</p></div>';
 
     /* 編輯模式：一覽表，撳一行先展開編輯器 */
     d.fullRota.forEach(function (r) {
@@ -2513,7 +2514,7 @@ function renderRota() {
     h += '<div class="section-label">臨時工作</div>';
     var list = d.oneoffList || [];
     if (!list.length) {
-      h += '<div class="empty">未有排期中嘅臨時工作</div>';
+      h += '<div class="empty">未有排期中的臨時工作</div>';
     } else {
       list.forEach(function (r) {
         var meta = esc(r.date) + (r.note ? ' · ' + esc(r.note) : '') + ' · ' + esc(r.by) + ' 加入';
@@ -2534,7 +2535,7 @@ function renderRota() {
       '<label>備註（可留空）</label><input id="noNote">' +
       '<label>連結（可留空）</label><input id="noLink" placeholder="https://…">' +
       '<div style="margin-top:12px"><button class="primary" onclick="addOneoffTask()">新增</button></div>' +
-      '<p style="font-size:12px;color:var(--ink-soft);margin-top:8px">臨時工作只會喺指定嗰一日出現喺「今日工作」。</p>' +
+      '<p style="font-size:12px;color:var(--ink-soft);margin-top:8px">臨時工作只會在指定的那一日出現在「今日工作」。</p>' +
       '</div></details>';
   }
   box.innerHTML = h;
@@ -2663,10 +2664,10 @@ function checkSchedule(b) {
   var freq = String(b.freq || '').trim();
   var errors = [], warns = [], info = '';
   var picked = b.rules.reduce(function (n, r) { return n + r.days.length; }, 0);
-  if (!picked) { errors.push('未揀任何星期'); return { errors: errors, warns: warns, info: '' }; }
+  if (!picked) { errors.push('未選擇任何星期'); return { errors: errors, warns: warns, info: '' }; }
 
   b.rules.forEach(function (r, i) {
-    if (r.weeks.length && !r.days.length) warns.push('第 ' + (i + 1) + ' 組揀咗週數但未揀星期');
+    if (r.weeks.length && !r.days.length) warns.push('第 ' + (i + 1) + ' 組已選週數但未選星期');
   });
 
   var y = new Date().getFullYear(), total = 0, perMonth = [];
@@ -2691,11 +2692,11 @@ function checkSchedule(b) {
     warns.push('予定實際一年約 ' + total + ' 次，但頻率寫住「' + freq + '」（預期約 ' + exp + ' 次）');
   }
   if (missing.length) {
-    warns.push('呢啲月份完全唔會出現：' + missing.join('、') + '月');
+    warns.push('這些月份完全不會出現：' + missing.join('、') + '月');
   }
   var usesW5 = b.rules.some(function (r) { return r.weeks.indexOf(5) > -1; });
   if (usesW5) {
-    warns.push('用咗「第5週」：每月 29–31 號先算第5週，短月份未必有你揀嗰個星期幾');
+    warns.push('使用了「第5週」：每月 29–31 號才算第5週，短月份未必有你選的那個星期幾');
   }
   info = '一年約 ' + total + ' 次 · 平均每月 ' + (total / 12).toFixed(1) + ' 次';
   return { errors: errors, warns: warns, info: info };
@@ -2786,10 +2787,10 @@ function renderRotaEditor(id) {
   }
 
   /* 予定 — 全部用掣 */
-  h += '<label style="margin-top:14px">予定（撳掣揀，唔使打字）</label>';
+  h += '<label style="margin-top:14px">予定（按鈕選擇，不用打字）</label>';
   b.rules.forEach(function (r, ri) {
     h += '<div class="rule"><div class="rule-hd"><span>第 ' + (ri + 1) + ' 組</span>' +
-      (b.rules.length > 1 ? '<button onclick="delRule(' + ri + ')">✕ 移除呢組</button>' : '') +
+      (b.rules.length > 1 ? '<button onclick="delRule(' + ri + ')">✕ 移除此組</button>' : '') +
       '</div>';
     h += '<div class="tog">' + DAY_ORDER.map(function (dd) {
       return '<button class="' + (r.days.indexOf(dd) > -1 ? 'on' : '') +
@@ -2803,7 +2804,7 @@ function renderRotaEditor(id) {
       }).join('') + '</div></div>';
   });
   h += '<button class="ghost" style="width:100%;margin-bottom:10px" onclick="addRule()">' +
-    '＋ 加多一組（唔同星期配唔同週數）</button>';
+    '＋ 增加一組（不同星期配不同週數）</button>';
 
   /* 月份篩選 */
   h += '<label>月份</label><div class="tog">' +
@@ -2820,13 +2821,13 @@ function renderRotaEditor(id) {
 
   /* 預覽 */
   var preview = buildYotei(b);
-  h += '<div class="preview"><span class="lbl">會存入工作表嘅予定</span>' +
-    (preview || '（未揀日子）') + '</div>';
+  h += '<div class="preview"><span class="lbl">會存入工作表的予定</span>' +
+    (preview || '（未選日子）') + '</div>';
 
   /* 邏輯檢查 */
   var chk = checkSchedule(b);
   if (chk.errors.length) {
-    h += '<div class="chk bad"><b>✗ 有問題，唔可以儲存</b>' +
+    h += '<div class="chk bad"><b>✗ 有問題，不可以儲存</b>' +
       chk.errors.map(function (x) { return '<div>· ' + esc(x) + '</div>'; }).join('') + '</div>';
   } else if (chk.warns.length) {
     h += '<div class="chk warn"><b>⚠ 請確認以下情況</b>' +
@@ -2850,12 +2851,12 @@ function saveRotaEditor(id) {
   var b = state.builder;
   var yotei = buildYotei(b);
   if (!String(b.item || '').trim()) return toast('請填項目');
-  if (!yotei) return toast('請至少揀一日');
+  if (!yotei) return toast('請至少選擇一日');
 
   var chk = checkSchedule(b);
   if (chk.errors.length) return toast(chk.errors[0]);
   if (chk.warns.length) {
-    if (!confirm('檢查到 ' + chk.warns.length + ' 項要留意嘅地方：\n\n· ' +
+    if (!confirm('檢查到 ' + chk.warns.length + ' 項需要留意的地方：\n\n· ' +
       chk.warns.join('\n· ') + '\n\n仍然要儲存嗎？')) return;
   }
   var lk = String(b.link || '').trim();
@@ -3251,7 +3252,7 @@ function bowPanel(b) {
   // 保養狀態同操作統一擺喺「報告」頁，呢度唔重複
   if (d.isLeader) {
     h += '<div class="bow-ops"><button class="ghost" onclick="openBowEdit(\'' +
-      esc(b.id) + '\')">✎ 編輯呢張弓</button></div>';
+      esc(b.id) + '\')">✎ 編輯弓資料</button></div>';
   }
   if (state.bowEdit === b.id) h += bowEditForm(b);
   return h + '</div>';
@@ -3271,7 +3272,7 @@ function bowEditForm(b) {
     }).join('') + '</select>' +
     '<label>品牌</label><input id="be_brand" value="' + esc(b.brand) + '">' +
     '<label>弓力 (kg)</label><input id="be_kg" type="number" inputmode="numeric" value="' + b.kg + '">' +
-    '<label>保養週期（幾多次借出後要檢查，留空用預設）</label>' +
+    '<label>保養週期（借出多少次後需要檢查，留空用預設）</label>' +
     '<input id="be_every" type="number" inputmode="numeric" value="' + (b.every || '') + '">' +
     '<label>備註</label><input id="be_note" value="' + esc(b.note || '') + '">' +
     '<div class="edit-row" style="margin-top:12px">' +
@@ -3358,8 +3359,8 @@ function evtCatPanel() {
     }).join('') +
     '<div class="edit-row" style="margin-top:10px">' +
     '<button class="ghost" onclick="addEvtCat()">＋ 加一項</button></div>' +
-    '<p class="svc-hint">刪走一個類別唔會影響已經用緊佢嘅活動 —— 嗰啲照顯示返舊名，' +
-    '只係下次編輯嗰個活動嗰陣要重新揀過。</p>' +
+    '<p class="svc-hint">刪除一個類別不會影響正在使用它的活動 —— 那些會照樣顯示舊名，' +
+    '只是下次編輯那個活動時要重新選擇。</p>' +
     '<div class="edit-row" style="margin-top:8px">' +
     '<button class="primary" onclick="saveEvtCats()">儲存</button>' +
     '<button class="ghost" onclick="closeCatEdit()">取消</button></div></div>';
@@ -3537,7 +3538,7 @@ function renderStock() {
     '<label>類別</label><input id="niCat" placeholder="例：清潔用品 / 維修用品">' +
     '<label>單位</label><input id="niUnit" placeholder="例：包 / 卷 / 支">' +
     '<label>現有數量</label><input id="niQty" type="number" inputmode="numeric" value="0">' +
-    '<label>最少儲備（跌到呢個數就提醒購買）</label><input id="niMin" type="number" inputmode="numeric" value="1">' +
+    '<label>最少儲備（低於此數提醒購買）</label><input id="niMin" type="number" inputmode="numeric" value="1">' +
     '<div style="margin-top:12px"><button class="primary" onclick="addItem()">新增</button></div>' +
     '</div></details>';
 
@@ -3653,7 +3654,7 @@ function renderItemEditor(it) {
       esc(it['項目']).replace(/'/g, "\\'") + '\')">刪除</button>' +
     '</div>' +
     '<p style="font-size:12px;color:var(--ink-soft);margin-top:8px">' +
-    '現有數量喺呢度改唔到，用返卡片上面嘅 ＋／− 點算。</p></div>';
+    '現有數量不能在這裡修改，請用卡片上面的 ＋／− 點算。</p></div>';
 }
 function saveItemEdit(id) {
   var f = {
@@ -3671,7 +3672,7 @@ function saveItemEdit(id) {
   }).catch(function (e) { toast('失敗：' + e.message); });
 }
 function delItem(id, name) {
-  if (!confirm('確定刪除「' + name + '」？\n呢個動作唔可以還原。')) return;
+  if (!confirm('確定刪除「' + name + '」？\n這個動作不可以還原。')) return;
   call('deleteInventoryItem', authPayload(), id).then(function (r) {
     if (!r.ok) return toast(r.msg);
     state.itemEdit = null;
@@ -3686,7 +3687,7 @@ function renderStockList() {
   var items = filteredStock();
 
   if (!items.length) {
-    box.innerHTML = '<div class="empty">搵唔到符合嘅物資</div>';
+    box.innerHTML = '<div class="empty">找不到符合的物資</div>';
     return;
   }
 
@@ -3800,7 +3801,7 @@ function saveAll() {
     if (it && Number(state.pending[id]) !== Number(it['現有數量'])) changes[id] = state.pending[id];
   });
   var n = Object.keys(changes).length;
-  if (!n) return toast('冇改動');
+  if (!n) return toast('沒有改動');
   toast('儲存緊 ' + n + ' 項…');
   call('updateStockBatch', authPayload(), changes).then(function (r) {
     if (!r.ok) return toast(r.msg);
@@ -3859,8 +3860,8 @@ function bowStatRow(b) {
 }
 function genSchedule(update) {
   var msg = update
-    ? '按現況更新本期排程？\n已完成嘅弓保留唔郁，未完成嘅會按最新借用紀錄重新分配。'
-    : '生成並發佈下月排程？\n會用本月借用紀錄計算，並即刻喺今日工作頁顯示。';
+    ? '按現況更新本期排程？\n已完成的弓保持不變，未完成的會按最新借用紀錄重新分配。'
+    : '生成並發佈下月排程？\n會用本月借用紀錄計算，並即時在今日工作頁顯示。';
   if (!confirm(msg)) return;
   toast(update ? '更新中…' : '生成中…');
   call('generateSchedule', authPayload(), !!update).then(function (r) {
@@ -3920,13 +3921,13 @@ function memberListPanel() {
 
   h += '<div class="edit-row" style="margin-bottom:10px">' +
     '<button class="chip-btn' + (state.memberShowAll ? ' on' : '') + '" onclick="toggleShowAll()">' +
-    (state.memberShowAll ? '只睇活躍' : '連非活躍（' + inactive + '）') + '</button>' +
+    (state.memberShowAll ? '只看活躍' : '連非活躍（' + inactive + '）') + '</button>' +
     (d.canEditActive ? '<button class="chip-btn ord" onclick="openAddMember()">＋ 新增會員</button>' : '') +
     '</div>';
 
   if (state.addMemberOpen) h += addMemberForm();
 
-  if (!list.length) return h + '<div class="empty">搵唔到</div>';
+  if (!list.length) return h + '<div class="empty">找不到</div>';
 
   list.forEach(function (m) {
     var e = (state.memberEdits || {})[m.id];
@@ -3983,15 +3984,15 @@ function memberEditor(m, cur, d) {
       'onchange="editMember(\'' + esc(m.id) + '\',\'promoDate\',this.value)">';
     if (cur.exam) {
       h += '<p class="svc-hint">舊紀錄仍有審查名「' + esc(cur.exam) + '」，' +
-        '改成級位之後可以撳下面清走。<br>' +
-        '<button class="ghost" style="margin-top:6px" onclick="editMember(\'' + esc(m.id) + '\',\'exam\',\'\')">清走審查名</button></p>';
+        '改成級位之後可以按下面清除。<br>' +
+        '<button class="ghost" style="margin-top:6px" onclick="editMember(\'' + esc(m.id) + '\',\'exam\',\'\')">清除審查名</button></p>';
     }
   } else {
     /* 以下係段位 */
     h += '<label class="svc-item" style="margin-top:12px">' +
       '<input type="checkbox"' + (other ? ' checked' : '') + (ro ? ' disabled' : '') +
       ' onchange="toggleExamOther(\'' + esc(m.id) + '\',this.checked)">' +
-      '<span>升段審查：其他（唔喺清單嘅審查，自行輸入）</span></label>';
+      '<span>升段審查：其他（不在清單的審查，自行輸入）</span></label>';
 
     if (other) {
       h += '<label>審查名稱</label>' +
@@ -4008,7 +4009,7 @@ function memberEditor(m, cur, d) {
         return x.name === cur.exam && x.date === cur.promoDate;
       })[0] || {}).key || '';
 
-      h += '<label>升段審查（只列出有開「' + esc(cur.grade) + '」嘅場次）</label>' +
+      h += '<label>升段審查（只列出有開「' + esc(cur.grade) + '」的場次）</label>' +
         '<select ' + (ro ? 'disabled' : '') + ' onchange="pickExamSession(\'' + esc(m.id) + '\',this.value)">' +
         '<option value="">— 未填 —</option>' +
         pool.map(function (x) {
@@ -4017,14 +4018,14 @@ function memberEditor(m, cur, d) {
         }).join('') + '</select>';
 
       if (!pool.length) {
-        h += '<p class="svc-hint">未有開「' + esc(cur.grade) + '」嘅審查場次。' +
-          '可以喺報告頁「登記升段結果」新增，或者剔上面「其他」自行輸入。</p>';
+        h += '<p class="svc-hint">未有開「' + esc(cur.grade) + '」的審查場次。' +
+          '可以在報告頁「登記升段結果」新增，或選上面「其他」自行輸入。</p>';
       }
 
       h += '<label>升段日子</label>' +
         '<input type="date" readonly value="' + esc(cur.promoDate || '') + '" ' +
         'style="background:var(--paper);color:var(--ink-soft)">' +
-        '<p class="svc-hint">日子由審查場次自動帶出。要自己填就剔「其他」。</p>';
+        '<p class="svc-hint">日子由審查場次自動帶出。如需自行填寫，請選「其他」。</p>';
     }
   }
 
@@ -4081,7 +4082,7 @@ function memberEditor(m, cur, d) {
         'onkeydown="if(event.key===\'Enter\'){event.preventDefault();addMemberTag(\'' + esc(m.id) + '\')}">' +
         '<button class="ghost" style="flex:0 0 76px" onclick="addMemberTag(\'' + esc(m.id) + '\')">＋ 加</button>' +
         '</div>';
-      if (!mine.length) h += '<p class="svc-hint">未有標籤。撳上面嘅標籤加落去，或者自己打一個新嘅。</p>';
+      if (!mine.length) h += '<p class="svc-hint">未有標籤。按上面的標籤加入，或自行輸入新標籤。</p>';
     }
   }
 
@@ -4092,7 +4093,7 @@ function memberEditor(m, cur, d) {
       ' onchange="editMember(\'' + esc(m.id) + '\',\'active\',this.checked)">' +
       '<span>活躍會員</span></label>';
   }
-  if (ro) h += '<p class="svc-hint">你冇權限編輯呢啲資料</p>';
+  if (ro) h += '<p class="svc-hint">你沒有權限編輯這些資料</p>';
   return h + '</div>';
 }
 
@@ -4133,7 +4134,7 @@ function promotePanel() {
   if (isDanMode) {
     h += '<label>審查場次</label>' +
       '<select onchange="setPromoExam(this.value)">' +
-      '<option value="">— 請揀 —</option>' +
+      '<option value="">— 請選擇 —</option>' +
       d.exams.map(function (x) {
         return '<option value="' + esc(x.key) + '"' + (state.promoExam === x.key ? ' selected' : '') + '>' +
           esc(x.name) + '（' + esc(dmy_(x.date)) + '・' + esc(x.range) + '）</option>';
@@ -4145,13 +4146,13 @@ function promotePanel() {
     if (state.newExamOpen) h += newExamForm(d);
 
     var ex = d.exams.filter(function (x) { return x.key === state.promoExam; })[0];
-    if (!ex) return h + '<p class="svc-hint">揀咗場次先可以剔選會員。</p></div>';
+    if (!ex) return h + '<p class="svc-hint">請先選擇場次，才可以選擇會員。</p></div>';
     allowed = ex.grades;
     h += '<p class="svc-hint">日期 ' + esc(dmy_(ex.date)) + '｜可登記：' + esc(allowed.join('、')) + '</p>';
   } else {
     h += '<label>館內試日期</label>' +
       '<input type="date" value="' + esc(state.promoDate || '') + '" onchange="setPromoDate(this.value)">';
-    if (!state.promoDate) return h + '<p class="svc-hint">填咗日期先可以剔選會員。</p></div>';
+    if (!state.promoDate) return h + '<p class="svc-hint">請先填日期，才可以選擇會員。</p></div>';
     allowed = d.grades.filter(function (g) {
       return (d.kyuGrades || []).indexOf(g) > -1 && g !== '級外';
     });
@@ -4174,7 +4175,7 @@ function promotePanel() {
 
   if (!list.length) {
     h += '<div class="empty">' +
-      (isDanMode ? '冇活躍會員' : '冇會員仲有級位可以升（三級以上要考段）') +
+      (isDanMode ? '沒有活躍會員' : '沒有會員可以升級位（三級以上要考段）') +
       '</div></div>';
     return h;
   }
@@ -4263,8 +4264,8 @@ function submitPromote() {
     return { id: id, grade: picks[id].grade };
   });
   var blank = list.filter(function (x) { return !x.grade; });
-  if (blank.length) return toast('有 ' + blank.length + ' 位未揀新級位');
-  if (!confirm('登記 ' + list.length + ' 位會員嘅升段結果？')) return;
+  if (blank.length) return toast('有 ' + blank.length + ' 位未選新級位');
+  if (!confirm('登記 ' + list.length + ' 位會員的升段結果？')) return;
   toast('登記中…');
   call('batchPromote', authPayload(), isDanMode ? 'dan' : 'kyu',
        state.promoExam || '', state.promoDate || '', list).then(function (r) {
@@ -4662,7 +4663,7 @@ function renderStats() {
       show.forEach(function (b) { h += bowStatRow(b); });
     }
     h += '<button class="ghost" style="width:100%;margin-top:2px" onclick="toggleBowAll()">' +
-      (state.bowAllStats ? '只睇需要留意嘅' : '睇全部 ' + bows.length + ' 張弓') + '</button>';
+      (state.bowAllStats ? '只看需要留意的' : '查看全部 ' + bows.length + ' 張弓') + '</button>';
   }
 
   /* ---- 維修紀錄（原本喺獨立分頁，而家歸埋入嚟；報告新維修改咗喺今日工作頁） ---- */
@@ -4692,12 +4693,12 @@ function renderStats() {
   var recent = d.recent || [];
   h += '<div class="section-label">最近事項</div>';
   if (!recent.length) {
-    h += '<div class="empty">未有需要跟進嘅事項 ○</div>';
+    h += '<div class="empty">未有需要跟進的事項 ○</div>';
   } else {
     h += actFeed(state.recentAll ? recent : recent.slice(0, 8), false);
     if (recent.length > 8) {
       h += '<button class="ghost" style="width:100%;margin-top:2px" onclick="toggleRecent()">' +
-        (state.recentAll ? '收起' : '睇多 ' + (recent.length - 8) + ' 項') + '</button>';
+        (state.recentAll ? '收起' : '查看更多 ' + (recent.length - 8) + ' 項') + '</button>';
     }
   }
 
