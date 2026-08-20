@@ -241,7 +241,17 @@
     font-size:12.5px;letter-spacing:.22em;color:var(--ink-soft);
     margin:16px 2px 8px;display:flex;align-items:center;gap:8px;
   }
-  .section-label::after{content:'';flex:1;height:1px;background:var(--line)}
+  .section-label::after{content:'';flex:1;height:1px;background:var(--line);order:1}
+  /* section-label 右邊嘅數量。
+     ⚠️ 一定要推到分隔線右邊 —— .section-label 有 letter-spacing:.22em，
+        數字貼住「8 月」後面就會被讀成「8 月 4 日」（2026-08-20 用戶回報
+        「個 4 字位置令人睇落好似 8 月 4 日咁」）。
+     純文字 flex item 攞唔到 order（永遠 0，即最左），所以靠 ::after 做
+     order:1 呢道分界就夠，唔使包多層 <span>。 */
+  .lbl-count{
+    order:2;flex:0 0 auto;
+    color:var(--ink-soft);font-size:11px;letter-spacing:0;white-space:nowrap;
+  }
   /* 組員貢獻嗰行右邊嘅「更新」細掣（貢獻有 5 分鐘 cache） */
   .contrib-refresh{
     flex:0 0 auto;background:none;border:1px solid var(--line);border-radius:6px;
@@ -386,7 +396,7 @@
      鬥 specificity 好易又搞出上次 .cal-head button 嗰種打和意外。
      呢個係獨立 class，冇得撞。 */
   .cal-clear{
-    flex:0 0 auto;background:none;border:1px solid var(--line);border-radius:6px;
+    order:3;flex:0 0 auto;background:none;border:1px solid var(--line);border-radius:6px;
     color:var(--ai);font-family:inherit;font-size:11.5px;letter-spacing:0;
     padding:3px 9px;cursor:pointer;white-space:nowrap;
   }
@@ -844,7 +854,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v60';
+var APP_VERSION = 'v61';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -1032,6 +1042,7 @@ var I18N = {
     calAll: '全部', calNoEvent: '這日沒有活動',
     calNoEventMonth: '這個月沒有活動', calShowMonth: '✕ 顯示整月',
     calPast: '已過去的活動',
+    nEvents: ' 個活動', nPending: ' 個未回覆',
     calWd: '日,一,二,三,四,五,六',
 
     /* 公家弓 */
@@ -1104,6 +1115,7 @@ var I18N = {
     calAll: 'All', calNoEvent: 'Nothing on this day',
     calNoEventMonth: 'No events this month', calShowMonth: '✕ Whole month',
     calPast: 'Past events',
+    nEvents: ' event(s)', nPending: ' awaiting reply',
     calWd: 'S,M,T,W,T,F,S',
 
     searchBow: 'Search number, brand…', allTypes: 'All', allKg: 'All weights',
@@ -1606,8 +1618,9 @@ function eventsSection() {
   var np = all.filter(evtPending_).length;
   var shown = all.slice(0, EVT_MAX);
 
+  /* 呢個數字係「未回覆」唔係「幾多個活動」—— 一定要帶單位講清楚 */
   var h = '<div class="section-label" id="evtBox">' + t('evtSection') +
-    (np ? ' <span class="cnt2">' + np + '</span>' : '') + '</div>';
+    (np ? '<span class="lbl-count">' + np + t('nPending') + '</span>' : '') + '</div>';
 
   if (!shown.length) h += '<div class="empty">' + t('evtNone') + '</div>';
   else shown.forEach(function (e) { h += eventCard(e); });
@@ -2397,7 +2410,7 @@ function renderCal() {
     label = calTitle_(ym);
   }
   h += '<div class="section-label">' + label +
-    (sel.length ? ' <span class="cnt2">' + sel.length + '</span>' : '') +
+    (sel.length ? '<span class="lbl-count">' + sel.length + t('nEvents') + '</span>' : '') +
     (state.calDay
       ? '<button class="cal-clear" onclick="calPick(\'' + state.calDay + '\')">' +
         t('calShowMonth') + '</button>'
@@ -2421,7 +2434,7 @@ function renderCal() {
     } else if (gone.length) {
       h += '<details class="cal-past"' + (state.calPastOpen ? ' open' : '') +
         ' ontoggle="state.calPastOpen=this.open"><summary>' + t('calPast') +
-        ' <span class="cnt2">' + gone.length + '</span></summary>';
+        ' <span class="cnt2">(' + gone.length + ')</span></summary>';
       gone.forEach(function (e) { h += eventCard(e); });
       h += '</details>';
     }
