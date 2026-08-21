@@ -960,7 +960,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v71';
+var APP_VERSION = 'v72';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -4265,7 +4265,10 @@ function bowStatRow(b) {
        「累計」淨係一個參考里程數，唔再參與計算。 */
     '<div class="meta">保養後借出 ' + b.used + ' 次 · ' +
     (b.left > 0 ? '距下次檢查 ' + b.left + ' 次' : '已到檢查點') +
-    '<br>累計 ' + b.total + ' 次' +
+    /* ⚠️ 用 loanRows（由借弓紀錄實數出嚟）唔用 b.total（「累計借出」個舊
+       計數器）—— 呢個道場借弓一直走外部 Google Form，個計數器從來冇加過，
+       永遠係 0，擺出嚟只會令人以為壞咗（2026-08-22 用戶回報）。 */
+    '<br>紀錄總數 ' + (b.loanRows || 0) + ' 次' +
     (b.lastService ? ' · 上次保養：' + esc(b.lastService) : '') + '</div></div>' +
     '<div class="edit-row" style="flex:0 0 auto;flex-direction:column;gap:5px">' +
     '<button class="ghost" onclick="openSvc(\'' + esc(b.id) + '\',\'stats\')">✓ 已保養</button>' +
