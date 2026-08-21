@@ -341,8 +341,16 @@
         改咗做類別色。唔可以「順手」加返 .pending{border-left-color:var(--shu)}
         —— --shu 同 --matsu 本身就係調色盤入面嘅朱同松綠，加返就會令
         「朱色類別」同「未回覆」變到一模一樣，分唔出。
-        「未回覆」而家改用一粒朱色 pill 表示（見 .duty .tag.due）。 */
-  .duty .tag.due{color:var(--shu);border-color:var(--shu);font-weight:500}
+        「未回覆」而家改用一粒朱色 pill 表示（見 .duty .tag.wait）。 */
+  /* 「未回覆」—— 實色底白字，比其他描邊 pill 搶眼，但字級／padding／邊框
+     全部同 .duty .tag 一樣，所以高度一致、同排 pill 對齊得返。
+     ⚠️ 呢個 class 叫 .wait 唔叫 .due —— 上面已經有個 .due（臨時工作嘅
+        「原定日期」區塊，帶住 margin-bottom:9px）。用 .due 會靜靜哋繼承
+        咗嗰個下邊距，喺 align-items:center 嘅 flex 行度將粒 pill 推高幾 px，
+        睇落好似出咗 bug（2026-08-21 中過招，用戶回報「未回覆高一點」）。 */
+  .duty .tag.wait{
+    background:var(--shu);border-color:var(--shu);color:#fff;font-weight:600;
+  }
   .duty .tag.ok{color:var(--matsu);border-color:var(--matsu)}
   /* 類別 pill 嘅顏色由 JS 落 inline style（類別數量可變，寫死唔到） */
   .duty .tag.cat{font-weight:500}
@@ -929,7 +937,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v67';
+var APP_VERSION = 'v68';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -1793,7 +1801,7 @@ function eventCard(e) {
   else if (e.myRsvp) pill = '<span class="tag">' + t('evtDecline') + '</span>';
   /* ⚠️ 呢個 pill 唔可以慳 —— 卡邊改咗做類別色之後，「未回覆」喺摺埋
      狀態下就淨返呢粒嘢做訊號。 */
-  else if (pending) pill = '<span class="tag due">' + t('evtPending') + '</span>';
+  else if (pending) pill = '<span class="tag wait">' + t('evtPending') + '</span>';
 
   var h = '<div class="' + cls + '"' + edge + '>' +
     '<div class="duty-top tap" onclick="toggleEvent(\'' + esc(e.id) + '\')">' +
