@@ -381,6 +381,21 @@
         flex:0 0 auto 都冇用，粒掣照撐到成行，將隔籬啲字逼到一個字一行
         （2026-08-21 中過招）。specificity 要 (0,3,1) 先贏得過佢。 */
   /* 每把弓嘅借用紀錄（報告頁）。三欄打橫：時間／人／原因。 */
+  /* 公家弓保養列：掣打橫排，張卡高度由 info 決定 */
+  .card.item.bowrow{padding:10px 12px;gap:8px}
+  .bow-acts{display:flex;gap:6px;flex:0 0 auto}
+  /* ⚠️ 一定要寫足「.card.item .bow-acts button.iconbtn」(0,3,1)。
+     上面有條 .card.item button{margin-left:6px}（0,2,1），淨係寫
+     .bow-acts button.iconbtn 都係 (0,2,1) —— 打和之後靠排前排後決定，
+     呢個 codebase 已經因為咁中過幾次招。 */
+  .card.item .bow-acts button.iconbtn{
+    margin-left:0;width:38px;height:38px;padding:0;flex:0 0 auto;
+    border:1px solid var(--line);background:var(--card);border-radius:9px;
+    font-size:17px;line-height:1;font-family:inherit;cursor:pointer;
+  }
+  .card.item .bow-acts button.iconbtn:active{background:var(--paper)}
+  .card.item .bow-acts button.iconbtn.on{border-color:var(--ai);background:var(--paper)}
+
   .loanbox{margin-top:-4px;background:var(--paper)}
   .loanbox .loan-row{
     display:flex;gap:10px;align-items:baseline;
@@ -960,7 +975,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v72';
+var APP_VERSION = 'v73';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -4257,7 +4272,7 @@ function setStatus(id, status) {
 /* ============ 統計 ============ */
 /* ---------- 報告頁：公家弓保養 ---------- */
 function bowStatRow(b) {
-  var cls = 'card item' + (b.needService ? ' low' : '') + (b.status !== '正常' ? ' done' : '');
+  var cls = 'card item bowrow' + (b.needService ? ' low' : '') + (b.status !== '正常' ? ' done' : '');
   return '<div class="' + cls + '">' +
     '<div class="info"><div class="name">' + esc(b.label) +
     (b.status !== '正常' ? '<span class="multi">' + esc(b.status) + '</span>' : '') + '</div>' +
@@ -4268,14 +4283,25 @@ function bowStatRow(b) {
     /* ⚠️ 用 loanRows（由借弓紀錄實數出嚟）唔用 b.total（「累計借出」個舊
        計數器）—— 呢個道場借弓一直走外部 Google Form，個計數器從來冇加過，
        永遠係 0，擺出嚟只會令人以為壞咗（2026-08-22 用戶回報）。 */
-    '<br>紀錄總數 ' + (b.loanRows || 0) + ' 次' +
-    (b.lastService ? ' · 上次保養：' + esc(b.lastService) : '') + '</div></div>' +
-    '<div class="edit-row" style="flex:0 0 auto;flex-direction:column;gap:5px">' +
-    '<button class="ghost" onclick="openSvc(\'' + esc(b.id) + '\',\'stats\')">✓ 已保養</button>' +
-    '<button class="ghost" onclick="toggleBowLoans(\'' + esc(b.id) + '\')">借用紀錄</button>' +
+    '<br>紀錄 ' + (b.loanRows || 0) + ' 次' +
+    /* ⚠️ 斬走時分 —— 上次保養日期經 readSheet_ 出嚟會變 '2026-08-12 00:00'，
+       個 00:00 純粹係噪音，仲要迫張卡多一行。 */
+    (b.lastService ? ' · 上次保養 ' + esc(String(b.lastService).slice(0, 10)) : '') +
+    '</div></div>' +
+    /* 三粒掣改圖示打橫排 —— 本來三行文字掣（~115px）迫到張卡好高，
+       打橫之後張卡高度由 info 決定，縮咗接近一半。
+       ⚠️ 圖示掣冇字，所以 title 同 aria-label 兩樣都一定要有。 */
+    '<div class="bow-acts">' +
+    '<button class="iconbtn" title="登記已保養" aria-label="登記已保養" ' +
+    'onclick="openSvc(\'' + esc(b.id) + '\',\'stats\')">🔧</button>' +
+    '<button class="iconbtn' + (state.bowLoanId === b.id ? ' on' : '') + '" ' +
+    'title="借用紀錄" aria-label="借用紀錄" ' +
+    'onclick="toggleBowLoans(\'' + esc(b.id) + '\')">📜</button>' +
     (b.status === '正常'
-      ? '<button class="ghost" onclick="doBowStatus(\'' + esc(b.id) + '\',\'維修中\')">維修中</button>'
-      : '<button class="ghost" onclick="doBowStatus(\'' + esc(b.id) + '\',\'正常\')">回復正常</button>') +
+      ? '<button class="iconbtn" title="標記維修中" aria-label="標記維修中" ' +
+        'onclick="doBowStatus(\'' + esc(b.id) + '\',\'維修中\')">🛑</button>'
+      : '<button class="iconbtn on" title="回復正常" aria-label="回復正常" ' +
+        'onclick="doBowStatus(\'' + esc(b.id) + '\',\'正常\')">↩️</button>') +
     '</div></div>' +
     (state.svcBow === b.id && state.svcFrom === 'stats' ? svcForm(b.id) : '') +
     (state.bowLoanId === b.id ? bowLoansHtml_(b.id) : '');
