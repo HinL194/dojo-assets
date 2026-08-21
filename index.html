@@ -452,6 +452,8 @@
   .cat-sw button.sw.on{
     box-shadow:0 0 0 2px var(--card), 0 0 0 4px var(--ink);
   }
+  /* 已經畀第二個類別用咗 —— 淡曬同埋撳唔郁 */
+  .cat-sw button.sw[disabled]{opacity:.2;cursor:default}
   /* 「＋ 新增活動」：短掣、自己一行、靠左。
      ⚠️ 一定要寫足「.cal-add button.repairbtn」（0,2,1）先夠贏 .repairbtn
         （0,1,0）個 display:block;width:100%。唔好靠同分 specificity 撞彩。 */
@@ -922,7 +924,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v65';
+var APP_VERSION = 'v66';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -1727,6 +1729,25 @@ var CAT_COLORS = [
   '#3E6FA3', '#6F9455', '#7A5C42', '#6E675B',   // 淺藍 草綠 焦茶 鼠
   '#4A3D66', '#D4A73C', '#4E8F8A', '#8E6BA8'    // 深紫 明黃 水青 淺紫
 ];
+
+/** 同 Code.gs 個 uniqueCatColors_ 一樣嘅規則：n 隻唔重複嘅合法顏色。
+ *  先到先得，撞咗或者唔合法就派調色盤第一隻仲空住嘅。 */
+function uniqCatCols_(want, n) {
+  var out = [], used = {};
+  for (var i = 0; i < n; i++) {
+    var c = String(want[i] || '').toUpperCase();
+    if (CAT_COLORS.indexOf(c) === -1 || used[c]) {
+      c = '';
+      for (var k = 0; k < CAT_COLORS.length; k++) {
+        if (!used[CAT_COLORS[k]]) { c = CAT_COLORS[k]; break; }
+      }
+      if (!c) c = CAT_COLORS[i % CAT_COLORS.length];
+    }
+    used[c] = true;
+    out.push(c);
+  }
+  return out;
+}
 
 function catColor(cat) {
   var d = state.events || {};
@@ -3622,10 +3643,10 @@ function openCatEdit() {
   state.evtCatDraft = (d.allCats || []).slice();
   /* 顏色 draft 一定要同名 draft 一樣長 —— 後端靠位置對齊。
      後端未答顏色（舊版）就跌返落調色盤次序。 */
-  state.evtCatColorDraft = state.evtCatDraft.map(function (c, i) {
-    var mine = (d.catColors || [])[i];
-    return CAT_COLORS.indexOf(mine) > -1 ? mine : CAT_COLORS[i % CAT_COLORS.length];
-  });
+  /* ⚠️ 呢度就去重 —— 唔係開個面板出嚟，幾行同色，而每行嗰隻色又因為
+     「畀人用咗」而 disable 咗，連自己都揀唔返，變成死局。
+     同後端 uniqueCatColors_ 一樣：先到先得，撞咗就派第一隻空色。 */
+  state.evtCatColorDraft = uniqCatCols_(d.catColors || [], state.evtCatDraft.length);
   state.evtCatOpen = true;
   renderEvtView();
 }
@@ -3645,9 +3666,14 @@ function evtCatPanel() {
         '<input maxlength="12" value="' + esc(c) + '" oninput="editEvtCat(' + i + ',this.value)">' +
         '<button onclick="delEvtCat(' + i + ')" title="刪除">✕</button></div>' +
         '<div class="cat-sw">' + CAT_COLORS.map(function (col) {
-          return '<button class="sw' + (col === mine ? ' on' : '') +
-            '" style="background:' + col + '" onclick="pickCatColor(' + i + ',\'' + col + '\')"' +
-            ' aria-label="揀呢隻色"></button>';
+          /* 畀第二個類別用咗嘅色就揀唔到 —— 日曆嗰條橫間係類別嘅唯一
+             訊號，兩個類別同色個日曆就會呃人。自己嗰隻梗係唔 disable。 */
+          var taken = col !== mine && cols.indexOf(col) > -1;
+          return '<button class="sw' + (col === mine ? ' on' : '') + '"' +
+            (taken ? ' disabled aria-label="這個顏色已被其他類別使用"' : ' aria-label="揀呢隻色"') +
+            ' style="background:' + col + '"' +
+            (taken ? '' : ' onclick="pickCatColor(' + i + ',\'' + col + '\')"') +
+            '></button>';
         }).join('') + '</div>';
     }).join('') +
     '<div class="edit-row" style="margin-top:10px">' +
@@ -3662,9 +3688,11 @@ function editEvtCat(i, v) { state.evtCatDraft[i] = v; }
 /* ⚠️ 名同色兩個 draft 陣列一定要一齊 push／splice —— 後端係靠位置對齊，
    郁咗一邊冇郁另一邊，儲存之後成排顏色就會錯位。 */
 function addEvtCat() {
-  var n = state.evtCatDraft.length;
   state.evtCatDraft.push('');
-  state.evtCatColorDraft.push(CAT_COLORS[n % CAT_COLORS.length]);
+  /* 派第一隻仲空住嘅色，唔可以照 index 派 —— 中間刪過類別嘅話
+     照 index 派好易派到一隻已經有人用嘅。 */
+  state.evtCatColorDraft = uniqCatCols_(
+    state.evtCatColorDraft.concat(['']), state.evtCatDraft.length);
   renderEvtView();
 }
 function delEvtCat(i) {
