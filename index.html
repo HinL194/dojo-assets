@@ -389,10 +389,20 @@
   .cal-day.empty{background:none;border-color:transparent;cursor:default}
   .cal-day.today{border-color:var(--ai);font-weight:700;color:var(--ai)}
   .cal-day.sel{background:var(--ai);border-color:var(--ai);color:#fff}
-  /* 有活動嘅日子出彩色點（顏色 = 類別），最多 3 點 */
-  .cal-dots{display:flex;align-items:center;gap:2px;height:6px}
-  .cal-dot{width:5px;height:5px;border-radius:50%;display:block}
-  .cal-more{font-size:9px;color:var(--ink-soft);line-height:1}
+  /* 有活動嘅日子喺數字下面出彩色橫間（顏色 = 類別），最多 3 條。
+     原本係 5px 圓點，喺手機細到掃過咗都唔為意（2026-08-21 用戶回報）。
+     橫間面積大好多，而且多過一個類別照樣並排分得出。 */
+  .cal-dots{
+    display:flex;align-items:center;justify-content:center;gap:2px;
+    height:5px;align-self:stretch;padding:0 5px;
+  }
+  /* flex:1 1 0 令幾條間平分闊度，max-width 令得一條嗰陣唔會拉到成格咁闊；
+     格仔窄過三條間嘅時候會自己縮，唔會迫爆格。 */
+  .cal-dot{flex:1 1 0;min-width:0;max-width:13px;height:4px;border-radius:2px;display:block}
+  /* ⚠️ 撳中嗰格底色係 --ai(#27476E)，而第一隻類別色都係 #27476E ——
+     唔加呢圈白邊，藍色類別嘅間喺撳中嗰日會完全隱形。 */
+  .cal-day.sel .cal-dot{box-shadow:0 0 0 1px rgba(255,255,255,.92)}
+  .cal-more{font-size:9px;color:var(--ink-soft);line-height:1;flex:0 0 auto}
   .cal-day.sel .cal-more{color:#fff}
   /* 「✕ 顯示整月」—— 揀咗日子先出，撳返轉頭退去成個月。
      跟 .contrib-refresh 同一個模式（section-label 右邊嘅細掣）。
@@ -430,6 +440,16 @@
     line-height:1.35;cursor:pointer;
   }
   .cat-edit.on{background:var(--ai);border-color:var(--ai);color:#fff}
+  /* 類別面板每行下面嗰排揀色掣。揀中嗰隻用外框標示，唔用 ✓ ——
+     深色底上面個 ✓ 會被自己隻色食咗。 */
+  .cat-sw{display:flex;flex-wrap:wrap;gap:6px;padding:2px 0 10px}
+  .cat-sw button.sw{
+    width:24px;height:24px;border-radius:6px;border:1px solid rgba(0,0,0,.14);
+    padding:0;cursor:pointer;flex:0 0 auto;
+  }
+  .cat-sw button.sw.on{
+    box-shadow:0 0 0 2px var(--card), 0 0 0 4px var(--ink);
+  }
   /* 「＋ 新增活動」：短掣、自己一行、靠左。
      ⚠️ 一定要寫足「.cal-add button.repairbtn」（0,2,1）先夠贏 .repairbtn
         （0,1,0）個 display:block;width:100%。唔好靠同分 specificity 撞彩。 */
@@ -900,7 +920,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v63';
+var APP_VERSION = 'v64';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -974,7 +994,8 @@ var state = {
   calMonth: '',         // 日曆睇緊邊個月（yyyy-MM，空 = 本月）
   calDay: '',           // 日曆揀咗邊日（yyyy-MM-dd，空 = 唔篩，列出成個月）
   calCat: '',           // 日曆類別篩選（空 = 全部）
-  calPastOpen: false    // 日曆成個月模式下，過咗期嗰段摺疊開咗未
+  calPastOpen: false,   // 日曆成個月模式下，過咗期嗰段摺疊開咗未
+  evtCatColorDraft: null // 類別面板改緊嘅顏色（同 evtCatDraft 平行、同長度）
 };
 
 try {
@@ -1694,16 +1715,24 @@ function renderIfEvtView_() {
   if (state.tab === 'today' || state.tab === 'cal') renderEvtView();
 }
 
-/* 類別顏色：類別數量係可變嘅（館長改得），所以唔可以寫死 CSS token。
-   改為按類別喺清單入面嘅次序循環用呢個調色盤。
-   朱色（--shu）排最後，因為佢喺其他地方代表警告，唔想第一個類別就撞。 */
-var CAT_COLORS = ['#27476E', '#49714F', '#B8912D', '#6B5B8E', '#B8432D', '#6E675B'];
+/* 類別顏色：館長可以逐個類別喺類別面板揀。
+   ⚠️ 呢個陣列一定要同 Code.gs 個 EVENT_CAT_COLORS 一模一樣（連次序）——
+      後端用佢做白名單同 fallback，兩邊唔同步就會「面板揀藍、日曆出綠」。
+   ⚠️ 12 隻係上限，唔係求其截。日曆嗰條間得 4px 高，再多就會出現兩隻深藍、
+      兩隻深綠嗰種喺呢個尺寸下面分唔到嘅組合。 */
+var CAT_COLORS = [
+  '#27476E', '#49714F', '#B8912D', '#6B5B8E',   // 藍 松綠 金茶 藤紫
+  '#B8432D', '#2E6B6B', '#C2702A', '#C4708F',   // 朱 青 橙 桃
+  '#3E6FA3', '#6F9455', '#7A5C42', '#6E675B'    // 淺藍 草綠 焦茶 鼠
+];
 
 function catColor(cat) {
-  var all = (state.events && state.events.allCats) || [];
-  var i = all.indexOf(cat);
+  var d = state.events || {};
+  var i = (d.allCats || []).indexOf(cat);
   if (i < 0) return '#6E675B';        // 唔喺現行清單（例如館長刪走咗）就用中性色
-  return CAT_COLORS[i % CAT_COLORS.length];
+  /* 館長揀咗色就用佢嗰隻；未揀過（或者後端係舊版）就跌返落調色盤次序 */
+  var mine = (d.catColors || [])[i];
+  return CAT_COLORS.indexOf(mine) > -1 ? mine : CAT_COLORS[i % CAT_COLORS.length];
 }
 
 function catPill(cat) {
@@ -3330,7 +3359,8 @@ function clearSession_() {
   state.annText = null;
   state.eventOpenId = null;
   state.eventEditId = null; state.evtBuilder = null;
-  state.evtCatOpen = false; state.evtCatDraft = null;
+  state.evtCatOpen = false;
+  state.evtCatDraft = null; state.evtCatColorDraft = null;
   state.attPanelId = null; state.attDraft = null;
   state.dupFromId = null; state.dupFromName = '';
   state.calMonth = ''; state.calDay = ''; state.calCat = ''; state.calPastOpen = false;
@@ -3586,22 +3616,37 @@ function saveReasons() {
 /* 跟借用原因同一套做法。入口喺首頁活動段，因為改完即刻見到效果。 */
 function openCatEdit() {
   if (state.evtCatOpen) return closeCatEdit();
-  state.evtCatDraft = ((state.events && state.events.allCats) || []).slice();
+  var d = state.events || {};
+  state.evtCatDraft = (d.allCats || []).slice();
+  /* 顏色 draft 一定要同名 draft 一樣長 —— 後端靠位置對齊。
+     後端未答顏色（舊版）就跌返落調色盤次序。 */
+  state.evtCatColorDraft = state.evtCatDraft.map(function (c, i) {
+    var mine = (d.catColors || [])[i];
+    return CAT_COLORS.indexOf(mine) > -1 ? mine : CAT_COLORS[i % CAT_COLORS.length];
+  });
   state.evtCatOpen = true;
   renderEvtView();
 }
 function closeCatEdit() {
-  state.evtCatOpen = false; state.evtCatDraft = null;
+  state.evtCatOpen = false;
+  state.evtCatDraft = null; state.evtCatColorDraft = null;
   renderEvtView();
 }
 function evtCatPanel() {
   var a = state.evtCatDraft || [];
+  var cols = state.evtCatColorDraft || [];
   return '<div class="card ordpanel">' +
     '<div class="rota-no">活動類別</div>' +
     a.map(function (c, i) {
+      var mine = cols[i] || CAT_COLORS[i % CAT_COLORS.length];
       return '<div class="ord-row">' +
         '<input maxlength="12" value="' + esc(c) + '" oninput="editEvtCat(' + i + ',this.value)">' +
-        '<button onclick="delEvtCat(' + i + ')" title="刪除">✕</button></div>';
+        '<button onclick="delEvtCat(' + i + ')" title="刪除">✕</button></div>' +
+        '<div class="cat-sw">' + CAT_COLORS.map(function (col) {
+          return '<button class="sw' + (col === mine ? ' on' : '') +
+            '" style="background:' + col + '" onclick="pickCatColor(' + i + ',\'' + col + '\')"' +
+            ' aria-label="揀呢隻色"></button>';
+        }).join('') + '</div>';
     }).join('') +
     '<div class="edit-row" style="margin-top:10px">' +
     '<button class="ghost" onclick="addEvtCat()">＋ 加一項</button></div>' +
@@ -3612,16 +3657,38 @@ function evtCatPanel() {
     '<button class="ghost" onclick="closeCatEdit()">取消</button></div></div>';
 }
 function editEvtCat(i, v) { state.evtCatDraft[i] = v; }
-function addEvtCat() { state.evtCatDraft.push(''); renderEvtView(); }
-function delEvtCat(i) { state.evtCatDraft.splice(i, 1); renderEvtView(); }
+/* ⚠️ 名同色兩個 draft 陣列一定要一齊 push／splice —— 後端係靠位置對齊，
+   郁咗一邊冇郁另一邊，儲存之後成排顏色就會錯位。 */
+function addEvtCat() {
+  var n = state.evtCatDraft.length;
+  state.evtCatDraft.push('');
+  state.evtCatColorDraft.push(CAT_COLORS[n % CAT_COLORS.length]);
+  renderEvtView();
+}
+function delEvtCat(i) {
+  state.evtCatDraft.splice(i, 1);
+  state.evtCatColorDraft.splice(i, 1);
+  renderEvtView();
+}
+function pickCatColor(i, col) { state.evtCatColorDraft[i] = col; renderEvtView(); }
 function saveEvtCats() {
-  var list = (state.evtCatDraft || []).filter(function (x) { return String(x).trim(); });
+  /* ⚠️ 濾走空白行嗰陣，顏色要跟返同一個 index 濾 —— 用 filter 分開做
+     兩次會錯位（名走咗一格，色冇走）。 */
+  var names = state.evtCatDraft || [];
+  var cols = state.evtCatColorDraft || [];
+  var list = [], colOut = [];
+  names.forEach(function (x, i) {
+    if (!String(x).trim()) return;
+    list.push(x);
+    colOut.push(cols[i] || CAT_COLORS[i % CAT_COLORS.length]);
+  });
   if (!list.length) return toast('至少要留一個類別');
   toast('儲存中…');
-  call('updateEventCats', authPayload(), list).then(function (r) {
+  call('updateEventCats', authPayload(), list, colOut).then(function (r) {
     if (!r.ok) return toast(r.msg);
     toast('已儲存');
-    state.evtCatOpen = false; state.evtCatDraft = null;
+    state.evtCatOpen = false;
+    state.evtCatDraft = null; state.evtCatColorDraft = null;
     reloadEvents();   // allCats 喺 getEvents 個 payload 度，要重攞
   }).catch(function (e) { toast('失敗：' + e.message); });
 }
