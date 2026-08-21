@@ -375,19 +375,15 @@
   .repairbtn.evt-all{color:var(--ink-soft);border-color:var(--line);margin-top:2px}
   .rsvp-row{display:flex;gap:8px;margin-top:10px}
   .rsvp-row button{flex:1}
-  /* 已經回覆咗 —— 只出結果，唔擺兩粒一撳就改嘅掣。
-     ⚠️ 寫足「.rsvp-done button.ghost」（0,2,1）先夠贏「button.ghost」（0,1,1）——
-        唔係粒「修改」會攞返 ghost 預設嘅 padding，撐到成行咁高。 */
-  .rsvp-done{
-    display:flex;align-items:center;gap:9px;margin-top:10px;
-    padding:9px 12px;border:1px solid var(--line);border-radius:var(--radius);
-    background:var(--paper);
+  /* 已經回覆咗 —— 結果喺上面 .evt-kv 打橫出，呢度淨係一粒細掣解鎖。
+     ⚠️ 一定要寫 width:auto。呢度係活動卡展開區，上面
+        「.duty-more button{width:100%}」一定會撞到 —— 唔寫 width 就算落咗
+        flex:0 0 auto 都冇用，粒掣照撐到成行，將隔籬啲字逼到一個字一行
+        （2026-08-21 中過招）。specificity 要 (0,3,1) 先贏得過佢。 */
+  .rsvp-edit{margin-top:10px}
+  .duty-more .rsvp-edit button.ghost{
+    width:auto;padding:7px 14px;font-size:12.5px;
   }
-  .rsvp-done .k{font-size:12px;color:var(--ink-soft);letter-spacing:.06em}
-  .rsvp-done b{flex:1;font-size:14px;font-weight:600}
-  .rsvp-done b.yes{color:var(--matsu)}
-  .rsvp-done b.no{color:var(--ink-soft)}
-  .rsvp-done button.ghost{flex:0 0 auto;padding:6px 12px;font-size:12.5px}
 
   /* ---------- 日曆 ---------- */
   .cal-head{display:flex;align-items:center;gap:8px;margin:10px 0 8px}
@@ -950,7 +946,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v69';
+var APP_VERSION = 'v70';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -1845,6 +1841,10 @@ function eventCard(e) {
     if (e.fee) add(t('evtFee'), esc(e.fee));
     if (e.deadline) add(t('evtDeadline'), esc(dmy_(e.deadline)));
     if (e.needRsvp) {
+      /* 自己嗰個回覆擺喺人數統計之前 —— 同其他資料一樣打橫寫，唔另開一個
+         方框（2026-08-21 用戶回報獨立方框「佔位太多、同其他資料唔一致」）。
+         ⚠️ e.myRsvp 係試算表值（'唔參加'），一定要行 t() 映射先出畫面。 */
+      if (e.myRsvp) add(t('evtMyReply'), e.myRsvp === '參加' ? t('evtJoin') : t('evtDecline'));
       add(t('evtGoing'), e.yes + (e.cap ? ' / ' + e.cap : ''));
       add(t('evtDecline'), String(e.no));
     } else if (e.cap) {
@@ -1870,15 +1870,10 @@ function eventCard(e) {
         h += '<p class="svc-hint">' + t('evtClosed') + '（' + esc(dmy_(e.deadline)) + '）</p>';
       } else if (e.myRsvp && state.rsvpEditId !== e.id) {
         /* 答咗就唔好再擺兩粒掣喺度 —— 一撳落去就即刻改咗，好易撳錯
-           （2026-08-21 用戶回報）。淨係出結果，要改就撳「修改」解鎖。
-           ⚠️ e.myRsvp 係試算表值（'唔參加'），出畫面一定要行 t() 映射，
-              唔可以直接印。 */
-        h += '<div class="rsvp-done">' +
-          '<span class="k">' + t('evtMyReply') + '</span>' +
-          '<b class="' + (going ? 'yes' : 'no') + '">' +
-          (going ? t('evtJoin') : t('evtDecline')) + '</b>' +
-          '<button class="ghost" onclick="editRsvp(\'' + esc(e.id) + '\')">' +
-          t('evtChange') + '</button></div>';
+           （2026-08-21 用戶回報）。回覆結果已經喺上面 .evt-kv 出咗，
+           呢度淨係留一粒細掣解鎖。 */
+        h += '<div class="rsvp-edit"><button class="ghost" onclick="editRsvp(\'' +
+          esc(e.id) + '\')">✎ ' + t('evtChange') + '</button></div>';
       } else {
         h += '<div class="rsvp-row">' +
           '<button class="' + (going ? 'primary' : 'ghost') + '" ' +
@@ -1890,8 +1885,8 @@ function eventCard(e) {
         if (full) h += '<p class="svc-hint">' + t('evtFull') + '</p>';
         /* 改到一半唔想改 —— 要有路退返出去，唔可以迫人一定要撳其中一邊 */
         if (e.myRsvp) {
-          h += '<div class="edit-row" style="margin-top:6px">' +
-            '<button class="ghost" onclick="cancelRsvpEdit()">' + t('evtKeep') + '</button></div>';
+          h += '<div class="rsvp-edit"><button class="ghost" onclick="cancelRsvpEdit()">' +
+            t('evtKeep') + '</button></div>';
         }
       }
       h += eventRosterHtml_(e.id);
