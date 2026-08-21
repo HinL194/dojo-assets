@@ -399,8 +399,10 @@
   /* flex:1 1 0 令幾條間平分闊度，max-width 令得一條嗰陣唔會拉到成格咁闊；
      格仔窄過三條間嘅時候會自己縮，唔會迫爆格。 */
   .cal-dot{flex:1 1 0;min-width:0;max-width:13px;height:4px;border-radius:2px;display:block}
-  /* ⚠️ 撳中嗰格底色係 --ai(#27476E)，而第一隻類別色都係 #27476E ——
-     唔加呢圈白邊，藍色類別嘅間喺撳中嗰日會完全隱形。 */
+  /* ⚠️ 撳中嗰格底色係 --ai(#27476E)。呢圈白邊本來係為咗救「第一隻類別色
+     都係 #27476E、撳中就完全隱形」嗰個 bug；#27476E 而家已經唔喺調色盤
+     入面（見 CAT_COLORS），但白邊要照留 —— 淺藍 #3E6FA3、深紫 #4A3D66
+     喺深藍底上面對比一樣唔夠。 */
   .cal-day.sel .cal-dot{box-shadow:0 0 0 1px rgba(255,255,255,.92)}
   .cal-more{font-size:9px;color:var(--ink-soft);line-height:1;flex:0 0 auto}
   .cal-day.sel .cal-more{color:#fff}
@@ -920,7 +922,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v64';
+var APP_VERSION = 'v65';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -1721,9 +1723,9 @@ function renderIfEvtView_() {
    ⚠️ 12 隻係上限，唔係求其截。日曆嗰條間得 4px 高，再多就會出現兩隻深藍、
       兩隻深綠嗰種喺呢個尺寸下面分唔到嘅組合。 */
 var CAT_COLORS = [
-  '#27476E', '#49714F', '#B8912D', '#6B5B8E',   // 藍 松綠 金茶 藤紫
-  '#B8432D', '#2E6B6B', '#C2702A', '#C4708F',   // 朱 青 橙 桃
-  '#3E6FA3', '#6F9455', '#7A5C42', '#6E675B'    // 淺藍 草綠 焦茶 鼠
+  '#49714F', '#B8432D', '#C2702A', '#C4708F',   // 松綠 朱 橙 桃
+  '#3E6FA3', '#6F9455', '#7A5C42', '#6E675B',   // 淺藍 草綠 焦茶 鼠
+  '#4A3D66', '#D4A73C', '#4E8F8A', '#8E6BA8'    // 深紫 明黃 水青 淺紫
 ];
 
 function catColor(cat) {
