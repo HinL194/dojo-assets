@@ -335,9 +335,14 @@
   .duty-name .note + .note{margin-top:1px}
 
   /* ---------- 活動 ---------- */
-  /* .duty 本身已經有左邊界，呢度淨係換色：紅＝要你回覆，綠＝答咗參加 */
-  .card.evt.pending{border-left-color:var(--shu)}
-  .card.evt.going{border-left-color:var(--matsu)}
+  /* 卡左邊界跟返類別顏色（由 eventCard 落 inline style），冇類別就留返
+     .duty 預設嘅 --ai。
+     ⚠️ 呢條邊本來係載 RSVP 狀態嘅（朱＝未回覆、松綠＝已參加），2026-08-21
+        改咗做類別色。唔可以「順手」加返 .pending{border-left-color:var(--shu)}
+        —— --shu 同 --matsu 本身就係調色盤入面嘅朱同松綠，加返就會令
+        「朱色類別」同「未回覆」變到一模一樣，分唔出。
+        「未回覆」而家改用一粒朱色 pill 表示（見 .duty .tag.due）。 */
+  .duty .tag.due{color:var(--shu);border-color:var(--shu);font-weight:500}
   .duty .tag.ok{color:var(--matsu);border-color:var(--matsu)}
   /* 類別 pill 嘅顏色由 JS 落 inline style（類別數量可變，寫死唔到） */
   .duty .tag.cat{font-weight:500}
@@ -924,7 +929,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v66';
+var APP_VERSION = 'v67';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -1103,7 +1108,7 @@ var I18N = {
     evtMore1: '還有 ', evtMore2: ' 個活動', evtNone: '近期沒有活動',
     evtNew: '新公佈',
     evtJoin: '參加', evtDecline: '不參加', evtGoing: '已參加',
-    evtNotice: '公告', evtCancelled: '已取消',
+    evtNotice: '公告', evtCancelled: '已取消', evtPending: '未回覆',
     evtWhen: '日期時間', evtWhere: '地點', evtHost: '負責人',
     evtFee: '費用', evtDeadline: '回覆截止', evtCap: '人數上限',
     evtRoster: '查看回覆情況', evtFull: '人數已滿', evtClosed: '已過回覆截止',
@@ -1177,7 +1182,7 @@ var I18N = {
     evtMore1: '', evtMore2: ' more event(s)', evtNone: 'No events coming up',
     evtNew: 'New',
     evtJoin: 'Going', evtDecline: 'Not going', evtGoing: 'Going',
-    evtNotice: 'Notice', evtCancelled: 'Cancelled',
+    evtNotice: 'Notice', evtCancelled: 'Cancelled', evtPending: 'Reply needed',
     evtWhen: 'Date & time', evtWhere: 'Place', evtHost: 'Organiser',
     evtFee: 'Fee', evtDeadline: 'Reply by', evtCap: 'Capacity',
     evtRoster: 'See replies', evtFull: 'Full', evtClosed: 'Replies closed',
@@ -1769,6 +1774,8 @@ function eventCard(e) {
   var going = e.myRsvp === '參加';
   var pending = evtPending_(e);
   var cls = 'card duty evt' + (pending ? ' pending' : '') + (going ? ' going' : '');
+  /* 冇類別就唔落 inline style，留返 .duty 預設嗰隻 --ai */
+  var edge = e.cat ? ' style="border-left-color:' + catColor(e.cat) + '"' : '';
 
   var when = (e.date ? esc(dmy_(e.date)) : '') + (e.time ? ' ' + esc(e.time) : '');
   /* 地點自己一行 —— 之前同日期時間用「　·　」串埋一條 .note，長少少就會
@@ -1784,8 +1791,11 @@ function eventCard(e) {
   else if (!e.needRsvp) pill = '<span class="tag">' + t('evtNotice') + '</span>';
   else if (going) pill = '<span class="tag ok">' + t('evtGoing') + '</span>';
   else if (e.myRsvp) pill = '<span class="tag">' + t('evtDecline') + '</span>';
+  /* ⚠️ 呢個 pill 唔可以慳 —— 卡邊改咗做類別色之後，「未回覆」喺摺埋
+     狀態下就淨返呢粒嘢做訊號。 */
+  else if (pending) pill = '<span class="tag due">' + t('evtPending') + '</span>';
 
-  var h = '<div class="' + cls + '">' +
+  var h = '<div class="' + cls + '"' + edge + '>' +
     '<div class="duty-top tap" onclick="toggleEvent(\'' + esc(e.id) + '\')">' +
     '<div class="duty-name">' + esc(e.name) + sub + '</div>' +
     catPill(e.cat) +
