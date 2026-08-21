@@ -329,6 +329,10 @@
     border-radius:4px;padding:0 6px;white-space:nowrap;font-weight:400;
   }
   .duty .note{font-size:12.5px;color:var(--ink-soft);font-weight:400;margin-top:2px}
+  /* 第二條 note（地點）貼實上面嗰條日期時間，兩者當一組睇。
+     ⚠️ 特登 scope 落 .duty-name —— .duty .note 喺 dutyCard（臨時工作備註）
+        同 .duty-more（活動詳情）都有用，唔想誤中。 */
+  .duty-name .note + .note{margin-top:1px}
 
   /* ---------- 活動 ---------- */
   /* .duty 本身已經有左邊界，呢度淨係換色：紅＝要你回覆，綠＝答咗參加 */
@@ -401,13 +405,24 @@
     padding:3px 9px;cursor:pointer;white-space:nowrap;
   }
   .cal-clear:active{background:var(--paper)}
-  /* 類別列：chips 喺自己個框入面橫向捲，粒筆釘喺右邊唔跟住捲。
-     ⚠️ min-width:0 唔可以漏 —— flex item 預設 min-width:auto，即係縮唔細
-        過內容，冇咗佢 .chips 會被啲 chip 撐爆，overflow-x 完全唔生效，
-        反而將粒筆擠出畫面右邊（類別一多就中招）。
-     padding-right 留返少少位，免得捲到盡頭最後一個 chip 貼實粒筆。 */
+  /* 類別列：chips 摺行，粒筆釘喺右上角。
+     ⚠️ align-items:flex-start 唔可以改做 center —— chips 摺到兩三行嗰陣，
+        center 會將粒筆推到成堆類別嘅中間高度，望落好似漂浮咁。
+     ⚠️ min-width:0 唔可以漏 —— flex item 預設 min-width:auto（縮唔細過
+        內容）。而家雖然摺行冇咗溢出問題，但長類別名一樣可以撐爆 .chips
+        再將粒筆擠出畫面右邊。 */
   .cat-row{display:flex;align-items:flex-start;gap:8px}
-  .cat-row .chips{flex:1;min-width:0;padding-right:2px}
+  /* 類別數目有限（館長自己管，通常 4-6 個），所以摺行好過橫向捲 ——
+     捲走咗嘅類別用戶根本唔知有（2026-08-21 回報「唔知右邊收起嗰啲類別」）。
+     摺行之後乜都睇得晒，連捲動條同提示都唔使做。
+     ⚠️ 特登只改 .cat-row 入面呢個 .chips。物資／公家弓嗰幾行照舊橫向捲 ——
+        嗰啲項目可以好多，摺行會變幾行高，反而礙事。
+     padding-bottom 原本係留位畀捲動條，唔捲就清零；行距靠 .chips 自己
+     嗰個 gap:6px。
+     ⚠️ 呢條規則排喺基底 `.chips`（下面成 130 行）之前，但照樣贏 ——
+        specificity (0,2,0) > (0,1,0)，同排前排後無關。唔好見到下面
+        `.chips{overflow-x:auto}` 就以為呢度失效而「順手」搬位。 */
+  .cat-row .chips{flex:1;min-width:0;flex-wrap:wrap;overflow-x:visible;padding-bottom:0}
   /* 高度靠 padding 同 .chip-btn（5px 13px / 13px）睇齊，唔寫死 height */
   .cat-edit{
     flex:0 0 auto;border:1px solid var(--line);background:var(--card);color:var(--ai);
@@ -427,11 +442,21 @@
   /* 活動詳情：打橫排，唔夠位就成項跳落一行。
      ⚠️ 唔可以用 .kv —— 佢係 flex 一行一對，塞幾對入同一個就會逼到啲字直住排。 */
   .evt-kv{
-    display:flex;flex-wrap:wrap;gap:5px 14px;
-    padding:8px 0;margin-bottom:2px;border-bottom:1px solid var(--line);
+    display:flex;flex-wrap:wrap;gap:10px 18px;
+    padding:9px 0;margin-bottom:2px;border-bottom:1px solid var(--line);
   }
-  .evt-kv > div{font-size:13px;white-space:nowrap}
-  .evt-kv .k{color:var(--ink-soft);margin-right:5px}
+  /* 標籤細字喺上、資料喺下。
+     ⚠️ 之前兩者同一行同一個字級（13px），組與組之間 14px、組內 label→value
+        得 5px —— 兩個距離太接近，眼睛分唔到組，成排字黐埋（2026-08-21
+        用戶回報「資料名稱同資料本身對比唔夠一眼」）。
+        而家靠「字級 + 顏色 + 換行」三重分開。
+     ⚠️ .k 原本有 margin-right:5px，成條規則換走咗，所以 margin 要重新寫齊，
+        唔係會殘留右邊嗰個間距。 */
+  .evt-kv > div{font-size:13.5px;white-space:nowrap;color:var(--ink);font-weight:500}
+  .evt-kv .k{
+    display:block;font-size:10.5px;font-weight:400;letter-spacing:.08em;
+    color:var(--ink-soft);margin:0 0 2px;
+  }
   /* 回覆名單：會員編號行頭，同公家弓卡一樣嘅睇法 */
   .tag-row .multi b{color:var(--ai);font-weight:600;margin-right:4px}
 
@@ -875,7 +900,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v62';
+var APP_VERSION = 'v63';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -1694,7 +1719,11 @@ function eventCard(e) {
   var cls = 'card duty evt' + (pending ? ' pending' : '') + (going ? ' going' : '');
 
   var when = (e.date ? esc(dmy_(e.date)) : '') + (e.time ? ' ' + esc(e.time) : '');
-  var sub = [when, e.place ? esc(e.place) : ''].filter(function (x) { return x; }).join('　·　');
+  /* 地點自己一行 —— 之前同日期時間用「　·　」串埋一條 .note，長少少就會
+     喺地點名中間斷行（「恆生2樓」斷開兩行，2026-08-21 用戶回報）。
+     ⚠️ sub 而家已經係 HTML，下面唔可以再包多一層 .note。 */
+  var sub = (when ? '<div class="note">' + when + '</div>' : '') +
+    (e.place ? '<div class="note">' + esc(e.place) + '</div>' : '');
 
   /* 類別同狀態係兩粒獨立嘅 pill，可以同時出現 */
   var pill = '';
@@ -1706,8 +1735,7 @@ function eventCard(e) {
 
   var h = '<div class="' + cls + '">' +
     '<div class="duty-top tap" onclick="toggleEvent(\'' + esc(e.id) + '\')">' +
-    '<div class="duty-name">' + esc(e.name) +
-    (sub ? '<div class="note">' + sub + '</div>' : '') + '</div>' +
+    '<div class="duty-name">' + esc(e.name) + sub + '</div>' +
     catPill(e.cat) +
     /* 話返畀人知點解呢個活動會出喺首頁（日子仲遠，但啱啱先公佈） */
     (evtIsNew_(e, (state.events || {}).today) ? '<span class="tag new">' + t('evtNew') + '</span>' : '') +
