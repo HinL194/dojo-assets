@@ -375,6 +375,19 @@
   .repairbtn.evt-all{color:var(--ink-soft);border-color:var(--line);margin-top:2px}
   .rsvp-row{display:flex;gap:8px;margin-top:10px}
   .rsvp-row button{flex:1}
+  /* 已經回覆咗 —— 只出結果，唔擺兩粒一撳就改嘅掣。
+     ⚠️ 寫足「.rsvp-done button.ghost」（0,2,1）先夠贏「button.ghost」（0,1,1）——
+        唔係粒「修改」會攞返 ghost 預設嘅 padding，撐到成行咁高。 */
+  .rsvp-done{
+    display:flex;align-items:center;gap:9px;margin-top:10px;
+    padding:9px 12px;border:1px solid var(--line);border-radius:var(--radius);
+    background:var(--paper);
+  }
+  .rsvp-done .k{font-size:12px;color:var(--ink-soft);letter-spacing:.06em}
+  .rsvp-done b{flex:1;font-size:14px;font-weight:600}
+  .rsvp-done b.yes{color:var(--matsu)}
+  .rsvp-done b.no{color:var(--ink-soft)}
+  .rsvp-done button.ghost{flex:0 0 auto;padding:6px 12px;font-size:12.5px}
 
   /* ---------- 日曆 ---------- */
   .cal-head{display:flex;align-items:center;gap:8px;margin:10px 0 8px}
@@ -937,7 +950,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v68';
+var APP_VERSION = 'v69';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -1012,7 +1025,8 @@ var state = {
   calDay: '',           // 日曆揀咗邊日（yyyy-MM-dd，空 = 唔篩，列出成個月）
   calCat: '',           // 日曆類別篩選（空 = 全部）
   calPastOpen: false,   // 日曆成個月模式下，過咗期嗰段摺疊開咗未
-  evtCatColorDraft: null // 類別面板改緊嘅顏色（同 evtCatDraft 平行、同長度）
+  evtCatColorDraft: null, // 類別面板改緊嘅顏色（同 evtCatDraft 平行、同長度）
+  rsvpEditId: null      // 邊張活動卡解鎖咗個回覆（空 = 全部只出結果）
 };
 
 try {
@@ -1117,6 +1131,7 @@ var I18N = {
     evtNew: '新公佈',
     evtJoin: '參加', evtDecline: '不參加', evtGoing: '已參加',
     evtNotice: '公告', evtCancelled: '已取消', evtPending: '未回覆',
+    evtMyReply: '你的回覆', evtChange: '修改', evtKeep: '取消修改',
     evtWhen: '日期時間', evtWhere: '地點', evtHost: '負責人',
     evtFee: '費用', evtDeadline: '回覆截止', evtCap: '人數上限',
     evtRoster: '查看回覆情況', evtFull: '人數已滿', evtClosed: '已過回覆截止',
@@ -1191,6 +1206,7 @@ var I18N = {
     evtNew: 'New',
     evtJoin: 'Going', evtDecline: 'Not going', evtGoing: 'Going',
     evtNotice: 'Notice', evtCancelled: 'Cancelled', evtPending: 'Reply needed',
+    evtMyReply: 'Your reply', evtChange: 'Change', evtKeep: 'Keep as is',
     evtWhen: 'Date & time', evtWhere: 'Place', evtHost: 'Organiser',
     evtFee: 'Fee', evtDeadline: 'Reply by', evtCap: 'Capacity',
     evtRoster: 'See replies', evtFull: 'Full', evtClosed: 'Replies closed',
@@ -1852,6 +1868,17 @@ function eventCard(e) {
         h += '<p class="svc-hint">' + t('evtOver') + '</p>';
       } else if (closed) {
         h += '<p class="svc-hint">' + t('evtClosed') + '（' + esc(dmy_(e.deadline)) + '）</p>';
+      } else if (e.myRsvp && state.rsvpEditId !== e.id) {
+        /* 答咗就唔好再擺兩粒掣喺度 —— 一撳落去就即刻改咗，好易撳錯
+           （2026-08-21 用戶回報）。淨係出結果，要改就撳「修改」解鎖。
+           ⚠️ e.myRsvp 係試算表值（'唔參加'），出畫面一定要行 t() 映射，
+              唔可以直接印。 */
+        h += '<div class="rsvp-done">' +
+          '<span class="k">' + t('evtMyReply') + '</span>' +
+          '<b class="' + (going ? 'yes' : 'no') + '">' +
+          (going ? t('evtJoin') : t('evtDecline')) + '</b>' +
+          '<button class="ghost" onclick="editRsvp(\'' + esc(e.id) + '\')">' +
+          t('evtChange') + '</button></div>';
       } else {
         h += '<div class="rsvp-row">' +
           '<button class="' + (going ? 'primary' : 'ghost') + '" ' +
@@ -1861,6 +1888,11 @@ function eventCard(e) {
           'onclick="doRsvp(\'' + esc(e.id) + '\',\'唔參加\')">' +
           (e.myRsvp === '唔參加' ? '✓ ' : '') + t('evtDecline') + '</button></div>';
         if (full) h += '<p class="svc-hint">' + t('evtFull') + '</p>';
+        /* 改到一半唔想改 —— 要有路退返出去，唔可以迫人一定要撳其中一邊 */
+        if (e.myRsvp) {
+          h += '<div class="edit-row" style="margin-top:6px">' +
+            '<button class="ghost" onclick="cancelRsvpEdit()">' + t('evtKeep') + '</button></div>';
+        }
       }
       h += eventRosterHtml_(e.id);
     }
@@ -2326,8 +2358,11 @@ function saveAttendance(id) {
 
 function toggleEvent(id) {
   state.eventOpenId = (state.eventOpenId === id) ? null : id;
+  state.rsvpEditId = null;      // 摺埋／換一張卡就重新鎖返回覆
   renderEvtView();
 }
+function editRsvp(id) { state.rsvpEditId = id; renderEvtView(); }
+function cancelRsvpEdit() { state.rsvpEditId = null; renderEvtView(); }
 function reloadEvents() {
   state.events = null; state.eventRoster = {};
   renderEvtView();
@@ -2610,6 +2645,7 @@ function doRsvp(id, ans) {
     delete state.eventRoster[id];        // 名單過時咗，下次撳先再攞
     /* ⚠️ 比較用嘅 ans 係試算表值（'唔參加'），出畫面就用書面語 */
     toast(ans === '參加' ? '已回覆：參加' : '已回覆：不參加');
+    state.rsvpEditId = null;     // 改完即刻鎖返，唔好留住兩粒掣
     renderEvtView();
   }).catch(function (e) { toast('失敗：' + e.message); });
 }
@@ -3403,6 +3439,7 @@ function clearSession_() {
   state.evtCatOpen = false;
   state.evtCatDraft = null; state.evtCatColorDraft = null;
   state.attPanelId = null; state.attDraft = null;
+  state.rsvpEditId = null;
   state.dupFromId = null; state.dupFromName = '';
   state.calMonth = ''; state.calDay = ''; state.calCat = ''; state.calPastOpen = false;
 }
