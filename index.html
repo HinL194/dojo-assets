@@ -380,6 +380,20 @@
         「.duty-more button{width:100%}」一定會撞到 —— 唔寫 width 就算落咗
         flex:0 0 auto 都冇用，粒掣照撐到成行，將隔籬啲字逼到一個字一行
         （2026-08-21 中過招）。specificity 要 (0,3,1) 先贏得過佢。 */
+  /* 每把弓嘅借用紀錄（報告頁）。三欄打橫：時間／人／原因。 */
+  .loanbox{margin-top:-4px;background:var(--paper)}
+  .loanbox .loan-row{
+    display:flex;gap:10px;align-items:baseline;
+    font-size:12.5px;padding:5px 0;border-bottom:1px solid var(--line);
+  }
+  .loanbox .loan-row:last-child{border-bottom:none}
+  .loanbox .loan-row .t{
+    flex:0 0 auto;color:var(--ink-soft);font-size:11.5px;
+    font-variant-numeric:tabular-nums;white-space:nowrap;
+  }
+  .loanbox .loan-row .w{flex:1;min-width:0;font-weight:500}
+  .loanbox .loan-row .r{flex:0 0 auto;color:var(--ink-soft);font-size:11.5px}
+
   .rsvp-edit{margin-top:10px}
   .duty-more .rsvp-edit button.ghost{
     width:auto;padding:7px 14px;font-size:12.5px;
@@ -946,7 +960,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v70';
+var APP_VERSION = 'v71';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -1022,7 +1036,9 @@ var state = {
   calCat: '',           // 日曆類別篩選（空 = 全部）
   calPastOpen: false,   // 日曆成個月模式下，過咗期嗰段摺疊開咗未
   evtCatColorDraft: null, // 類別面板改緊嘅顏色（同 evtCatDraft 平行、同長度）
-  rsvpEditId: null      // 邊張活動卡解鎖咗個回覆（空 = 全部只出結果）
+  rsvpEditId: null,     // 邊張活動卡解鎖咗個回覆（空 = 全部只出結果）
+  bowLoanId: null,      // 報告頁攤開緊邊把弓嘅借用紀錄
+  bowLoans: {}          // 弓編號 → 攞返嚟嘅紀錄（undefined=未攞 null=攞緊）
 };
 
 try {
@@ -1520,6 +1536,10 @@ function renderToday() {
     if (open) {
       h += '<div class="duty-body" onclick="event.stopPropagation()">';
       sch.days.forEach(function (dd) {
+        /* 嗰日全部剔曬就成日唔出，淨低未做嗰啲，張卡先夠短。
+           ⚠️ 只隱藏「全日做完」嗰啲 —— 做咗一半嘅日子照出，做完嗰幾把
+              仍然出 ✓，唔係會令人以為自己冇做過。 */
+        if (dd.bows.every(function (b) { return b.done; })) return;
         h += '<div class="svc-day">' + esc(String(dd.date).replace(/ .*$/, '')) + '</div><div class="svc-bows">';
         dd.bows.forEach(function (b) {
           if (b.done) {
@@ -3435,6 +3455,7 @@ function clearSession_() {
   state.evtCatDraft = null; state.evtCatColorDraft = null;
   state.attPanelId = null; state.attDraft = null;
   state.rsvpEditId = null;
+  state.bowLoanId = null; state.bowLoans = {};
   state.dupFromId = null; state.dupFromName = '';
   state.calMonth = ''; state.calDay = ''; state.calCat = ''; state.calPastOpen = false;
 }
@@ -4240,17 +4261,60 @@ function bowStatRow(b) {
   return '<div class="' + cls + '">' +
     '<div class="info"><div class="name">' + esc(b.label) +
     (b.status !== '正常' ? '<span class="multi">' + esc(b.status) + '</span>' : '') + '</div>' +
-    '<div class="meta">累計借出 ' + b.total + ' 次 · ' +
+    /* 「保養後借出」先係決定要唔要檢查嗰個數（見 Code.gs usageSinceService_）；
+       「累計」淨係一個參考里程數，唔再參與計算。 */
+    '<div class="meta">保養後借出 ' + b.used + ' 次 · ' +
     (b.left > 0 ? '距下次檢查 ' + b.left + ' 次' : '已到檢查點') +
-    (b.lastService ? '<br>上次保養：' + esc(b.lastService) : '') + '</div></div>' +
+    '<br>累計 ' + b.total + ' 次' +
+    (b.lastService ? ' · 上次保養：' + esc(b.lastService) : '') + '</div></div>' +
     '<div class="edit-row" style="flex:0 0 auto;flex-direction:column;gap:5px">' +
     '<button class="ghost" onclick="openSvc(\'' + esc(b.id) + '\',\'stats\')">✓ 已保養</button>' +
+    '<button class="ghost" onclick="toggleBowLoans(\'' + esc(b.id) + '\')">借用紀錄</button>' +
     (b.status === '正常'
       ? '<button class="ghost" onclick="doBowStatus(\'' + esc(b.id) + '\',\'維修中\')">維修中</button>'
       : '<button class="ghost" onclick="doBowStatus(\'' + esc(b.id) + '\',\'正常\')">回復正常</button>') +
     '</div></div>' +
-    (state.svcBow === b.id && state.svcFrom === 'stats' ? svcForm(b.id) : '');
+    (state.svcBow === b.id && state.svcFrom === 'stats' ? svcForm(b.id) : '') +
+    (state.bowLoanId === b.id ? bowLoansHtml_(b.id) : '');
 }
+
+/* ---------- 每把弓嘅借用紀錄（報告頁，工務組先睇到） ---------- */
+function toggleBowLoans(id) {
+  state.bowLoanId = (state.bowLoanId === id) ? null : id;
+  renderStats();
+}
+function bowLoansHtml_(id) {
+  var got = state.bowLoans[id];
+  if (got === undefined) {
+    /* undefined = 未攞過；null = 攞緊。分開兩個狀態先唔會連環叫 API。 */
+    state.bowLoans[id] = null;
+    call('getBowLoans', authPayload(), id).then(function (r) {
+      state.bowLoans[id] = r.ok ? r : { ok: false, msg: r.msg };
+      if (state.tab === 'stats') renderStats();
+    }).catch(function (e) {
+      state.bowLoans[id] = { ok: false, msg: e.message };
+      if (state.tab === 'stats') renderStats();
+    });
+  }
+  if (!got) return '<div class="card loanbox"><div class="loading">' + t('loading') + '</div></div>';
+  if (!got.ok) {
+    return '<div class="card loanbox"><div class="empty">' + t('loadFail') + esc(got.msg) +
+      '<br><br><button class="ghost" onclick="reloadBowLoans(\'' + esc(id) +
+      '\')">' + t('retry') + '</button></div></div>';
+  }
+  if (!got.loans.length) return '<div class="card loanbox"><div class="empty">未有借用紀錄</div></div>';
+  var more = got.total - got.loans.length;
+  return '<div class="card loanbox">' +
+    '<div class="rota-no">借用紀錄　共 ' + got.total + ' 次' +
+    (more > 0 ? '（只顯示最近 ' + got.loans.length + ' 次）' : '') + '</div>' +
+    got.loans.map(function (l) {
+      return '<div class="loan-row">' +
+        '<span class="t">' + esc(String(l.at).slice(0, 16)) + '</span>' +
+        '<span class="w">' + esc(l.who) + '</span>' +
+        '<span class="r">' + esc(l.reason) + '</span></div>';
+    }).join('') + '</div>';
+}
+function reloadBowLoans(id) { delete state.bowLoans[id]; renderStats(); }
 function genSchedule(update) {
   var msg = update
     ? '按現況更新本期排程？\n已完成的弓保持不變，未完成的會按最新借用紀錄重新分配。'
@@ -5043,9 +5107,12 @@ function renderStats() {
   var bows = d.bows || [];
   if (bows.length) {
     var due = bows.filter(function (b) { return b.needService && b.status !== '停用'; });
+    /* 粒「↻ 更新」係畀人喺試算表入完資料之後重攞一次。
+       ⚠️ 只更新報告頁。今日工作頁行 getPublicData，佢有 5 分鐘 server cache
+          （pub: + 日期），呢粒掣清唔到。 */
     h += '<div class="section-label">公家弓保養' +
       (due.length ? ' <span class="cnt2" style="color:var(--shu)">' + due.length + ' 張待檢查</span>' : '') +
-      '</div>';
+      '<button class="contrib-refresh" onclick="refreshOps()">↻ 更新</button></div>';
 
     var show = state.bowAllStats ? bows : bows.filter(function (b) {
       return b.needService || b.status !== '正常';
