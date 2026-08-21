@@ -401,6 +401,27 @@
     padding:3px 9px;cursor:pointer;white-space:nowrap;
   }
   .cal-clear:active{background:var(--paper)}
+  /* 類別列：chips 喺自己個框入面橫向捲，粒筆釘喺右邊唔跟住捲。
+     ⚠️ min-width:0 唔可以漏 —— flex item 預設 min-width:auto，即係縮唔細
+        過內容，冇咗佢 .chips 會被啲 chip 撐爆，overflow-x 完全唔生效，
+        反而將粒筆擠出畫面右邊（類別一多就中招）。
+     padding-right 留返少少位，免得捲到盡頭最後一個 chip 貼實粒筆。 */
+  .cat-row{display:flex;align-items:flex-start;gap:8px}
+  .cat-row .chips{flex:1;min-width:0;padding-right:2px}
+  /* 高度靠 padding 同 .chip-btn（5px 13px / 13px）睇齊，唔寫死 height */
+  .cat-edit{
+    flex:0 0 auto;border:1px solid var(--line);background:var(--card);color:var(--ai);
+    border-radius:20px;padding:5px 12px;font-size:14px;font-family:inherit;
+    line-height:1.35;cursor:pointer;
+  }
+  .cat-edit.on{background:var(--ai);border-color:var(--ai);color:#fff}
+  /* 「＋ 新增活動」：短掣、自己一行、靠左。
+     ⚠️ 一定要寫足「.cal-add button.repairbtn」（0,2,1）先夠贏 .repairbtn
+        （0,1,0）個 display:block;width:100%。唔好靠同分 specificity 撞彩。 */
+  .cal-add{margin:12px 0 2px}
+  .cal-add button.repairbtn{
+    display:inline-block;width:auto;margin-bottom:0;padding:9px 16px;font-size:13.5px;
+  }
   /* 成個月模式下，過咗期嗰段摺疊 —— 同上面將來嘅活動拉開少少距離 */
   .cal-past{margin-top:10px;border-top:1px solid var(--line);padding-top:4px}
   /* 活動詳情：打橫排，唔夠位就成項跳落一行。
@@ -854,7 +875,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-var APP_VERSION = 'v61';
+var APP_VERSION = 'v62';
 
 /* ============ 狀態 ============ */
 var state = {
@@ -1771,6 +1792,18 @@ function eventCard(e) {
 /* ---------- 活動編輯器（副組長以上） ---------- */
 
 /** 開／關編輯器。開嗰陣由活動 clone 一份草稿出嚟。 */
+/**
+ * 喺日曆撳「＋ 新增活動」嗰陣，日期預先填好：
+ *   撳咗邊日 → 嗰日；冇揀（成個月模式）→ 當月 1 號。
+ * ⚠️ 喺第二啲頁面開新活動就唔預填 —— 嗰陣 calMonth／calDay 嘅值同用戶
+ *    眼前見到嘅嘢冇關係，預填只會填錯。
+ * 望緊舊月份撳新增會預填一個過去嘅日期，係特登嘅（補登記舊活動啱用）。
+ */
+function calNewDate_() {
+  if (state.tab !== 'cal') return '';
+  return state.calDay || (state.calMonth ? state.calMonth + '-01' : '');
+}
+
 function openEventEditor(id) {
   if (state.eventEditId === id && !state.dupFromId) return closeEventEditor();
   var e = (id === '__new__') ? null : evtById_(id);
@@ -1787,7 +1820,8 @@ function openEventEditor(id) {
     viewRoles: (e.viewRoles || []).slice(), viewTags: (e.viewTags || []).slice(),
     inviteRoles: (e.inviteRoles || []).slice(), inviteTags: (e.inviteTags || []).slice()
   } : {
-    name: '', cat: '', date: '', time: '', place: '', detail: '',
+    /* ⚠️ 淨係新活動先預填。上面 if 分支係編輯現有活動，date: e.date 唔可以掂。 */
+    name: '', cat: '', date: calNewDate_(), time: '', place: '', detail: '',
     deadline: '', cap: '', fee: '', host: '', link: '',
     needRsvp: true, status: '公開',
     countsContrib: false, points: 1,       // 預設唔計貢獻，要逐個活動開
@@ -2335,30 +2369,31 @@ function renderCal() {
 
   var h = '';
 
-  /* 管理層入口 —— 由首頁搬咗過嚟，日曆而家係活動嘅主場 */
-  if (d.canEdit) {
-    /* dupFromId 有值嗰陣個 __new__ 編輯器係畫喺被複製嗰張卡入面，唔係呢度 */
-    var newHere = state.eventEditId === '__new__' && !state.dupFromId;
-    h += '<button class="repairbtn" onclick="openEventEditor(\'__new__\')">＋ 新增活動' +
-      (newHere ? ' ✕' : '') + '</button>';
-    if (newHere) h += renderEventEditor('__new__');
-    h += '<button class="repairbtn" onclick="openCatEdit()">✎ 編輯活動類別' +
-      (state.evtCatOpen ? ' ✕' : '') + '</button>';
+  /* 類別篩選 + 管理層嘅編輯入口（一支筆，釘喺 chips 右邊）
+     ⚠️ 粒筆一定要喺 .chips 外面 —— .chips 係 overflow-x:auto，擺入去就會
+        跟住橫向捲走，類別一多就搵唔返。
+     ⚠️ 條件用「cats.length || d.canEdit」：萬一類別清單空咗，管理層都仲要
+        有路入去加返，唔係就死鎖。 */
+  var cats = d.allCats || [];
+  if (cats.length || d.canEdit) {
+    h += '<div class="cat-row"><div class="chips">' +
+      (cats.length
+        ? '<button class="chip-btn' + (!state.calCat ? ' on' : '') + '" onclick="calFilter(\'\')">' +
+          t('calAll') + '</button>' +
+          cats.map(function (c) {
+            var on = state.calCat === c;
+            var css = on ? 'background:' + catColor(c) + ';border-color:' + catColor(c)
+                         : 'color:' + catColor(c) + ';border-color:' + catColor(c);
+            return '<button class="chip-btn' + (on ? ' on' : '') + '" style="' + css + '" ' +
+              'onclick="calFilter(\'' + esc(c) + '\')">' + esc(c) + '</button>';
+          }).join('')
+        : '') + '</div>' +
+      (d.canEdit
+        ? '<button class="cat-edit' + (state.evtCatOpen ? ' on' : '') + '" ' +
+          'onclick="openCatEdit()" title="編輯活動類別" aria-label="編輯活動類別">✎</button>'
+        : '') + '</div>';
+    /* 面板要出喺 .cat-row 之後，唔可以留喺個 flex row 入面 */
     if (state.evtCatOpen) h += evtCatPanel();
-  }
-
-  /* 類別篩選 */
-  if ((d.allCats || []).length) {
-    h += '<div class="chips">' +
-      '<button class="chip-btn' + (!state.calCat ? ' on' : '') + '" onclick="calFilter(\'\')">' +
-      t('calAll') + '</button>' +
-      d.allCats.map(function (c) {
-        var on = state.calCat === c;
-        var css = on ? 'background:' + catColor(c) + ';border-color:' + catColor(c)
-                     : 'color:' + catColor(c) + ';border-color:' + catColor(c);
-        return '<button class="chip-btn' + (on ? ' on' : '') + '" style="' + css + '" ' +
-          'onclick="calFilter(\'' + esc(c) + '\')">' + esc(c) + '</button>';
-      }).join('') + '</div>';
   }
 
   /* 月份標題 + 前後掣 */
@@ -2395,6 +2430,16 @@ function renderCal() {
       '</div></div>';
   }
   h += '</div>';
+
+  /* 「＋ 新增活動」擺喺格仔下面 —— 撳完邊日就順手開，日期會預先填好
+     （見 calNewDate_）。短掣、自己一行，唔好又佔滿成行推冧月曆。 */
+  if (d.canEdit) {
+    /* dupFromId 有值嗰陣個 __new__ 編輯器係畫喺被複製嗰張卡入面，唔係呢度 */
+    var newHere = state.eventEditId === '__new__' && !state.dupFromId;
+    h += '<div class="cal-add"><button class="repairbtn" onclick="openEventEditor(\'__new__\')">' +
+      '＋ 新增活動' + (newHere ? ' ✕' : '') + '</button></div>';
+    if (newHere) h += renderEventEditor('__new__');
+  }
 
   /* 冇揀日子＝列出成個月（一入嚟就係呢個狀態）；撳一日先篩落去。 */
   var sel, label;
